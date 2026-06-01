@@ -1,0 +1,96 @@
+================================================================================
+THIRD-PARTY COMPONENTS
+Software Name : ib-ORAN: Intent-Based Open RAN
+Repository    : https://github.com/Orange-OpenSource/ns3-iboran
+Copyright     : Copyright (c) Orange SA
+License       : MIT (original contributions) — see LICENSE
+================================================================================
+
+This file lists the third-party open-source components used in ib-ORAN,
+along with their copyright notices and license terms, in compliance with
+Orange open-source publication requirements.
+
+Their original license and copyright files are preserved within their
+respective directories. Do NOT remove or modify those files.
+
+================================================================================
+
+1. ns-3 Network Simulator
+--------------------------------------------------------------------------------
+   Source:      https://www.nsnam.org
+   Repository:  https://gitlab.com/nsnam/ns-3-dev
+   License:     GNU General Public License v2.0 (GPLv2)
+   SPDX ID:     GPL-2.0-only
+   License URL: https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
+   Copyright:   Copyright (c) 2005–2024 ns-3 Project contributors
+
+   Usage in ib-ORAN:
+   ib-ORAN is built on top of the ns-3 network simulator. The ns-3 LTE module
+   is used for LTE RAT simulation. C++ scheduler files that inherit from ns-3
+   classes (e.g. FfMacScheduler) or use ns-3 APIs are derivative works of
+   ns-3 and retain their original GPLv2 license. They are NOT covered by the
+   MIT License of this repository.
+
+--------------------------------------------------------------------------------
+
+2. ns3-gym
+--------------------------------------------------------------------------------
+   Source:      https://github.com/tkn-tub/ns3-gym
+   License:     GNU General Public License v2.0 (GPLv2)
+   SPDX ID:     GPL-2.0-only
+   License URL: https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
+   Copyright:   Copyright (c) Technische Universität Berlin, TKN Group
+
+   Usage in ib-ORAN:
+   ib-ORAN extends ns3-gym's shared-memory interface design for Python–C++
+   communication. Files derived from ns3-gym retain their GPLv2 license.
+
+--------------------------------------------------------------------------------
+
+3. ns3-ai
+--------------------------------------------------------------------------------
+   Source:      https://github.com/hust-diangroup/ns3-ai
+   License:     GNU General Public License v2.0 (GPLv2)
+   SPDX ID:     GPL-2.0-only
+   License URL: https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
+   Copyright:   Copyright (c) HUST DiAnGroup
+
+   Usage in ib-ORAN:
+   ib-ORAN uses ns3-ai's Ns3AiMsgInterface shared-memory bridge for
+   Python–C++ integration. Files using or derived from this interface
+   (e.g. iboran-lte-mac-scheduler.cc) retain their GPLv2 license.
+
+--------------------------------------------------------------------------------
+
+================================================================================
+GPLv2 COMPLIANCE OBLIGATIONS
+================================================================================
+
+When distributing ib-ORAN or any derivative work that includes the above
+GPLv2 components, you must:
+
+  1. Preserve all copyright notices and LICENSE/COPYING files in the
+     directories of the above components. Do not remove or alter them.
+
+  2. Provide (or offer to provide) the complete corresponding source code
+     when distributing binary forms that include GPLv2 components.
+
+  3. Not impose additional restrictions on the rights granted by GPLv2
+     to recipients of those components.
+
+For the full text of the GNU General Public License v2.0, see:
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
+
+================================================================================
+CONFIDENTIALITY NOTICE
+================================================================================
+
+Before publishing any new file, verify that it does not contain:
+  - Internal Orange URLs, intranet links, or internal IP addresses
+  - Personal data (employee names, emails) beyond what is in CONTRIBUTORS.md
+  - API keys, tokens, passwords, or credentials of any kind
+  - Internal project codes, cost center references, or contract numbers
+  - Confidential architecture diagrams or proprietary algorithms not
+    intended for public release
+
+================================================================================
