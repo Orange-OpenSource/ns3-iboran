@@ -253,6 +253,7 @@ PYBIND11_MODULE(iboran_shm_structure_py_binding, m)
     // == CONSTANTS ===============================================================
     m.attr("MAX_UE_NUM") = MAX_UE_NUM;
     m.attr("MAX_PRB_NUM_LTE") = MAX_PRB_NUM_LTE;
+    m.attr("MAX_PRB_NUM_NR") = MAX_PRB_NUM_NR;
     m.attr("MAX_ID_LEN") = MAX_ID_LEN;
     m.attr("E3SM_INDICATION") = E3SM_INDICATION;
     m.attr("E3SM_CONTROL") = E3SM_CONTROL;
@@ -260,6 +261,7 @@ PYBIND11_MODULE(iboran_shm_structure_py_binding, m)
     m.attr("E2SM_RC_CONTROL") = E2SM_RC_CONTROL;
     m.attr("SHM_SIZE") = SHM_SIZE;
     m.attr("LTE") = "LTE";
+    m.attr("NR") = "NR";
     m.attr("DOWNLINK") = 0;
     m.attr("UPLINK") = 1;
 }

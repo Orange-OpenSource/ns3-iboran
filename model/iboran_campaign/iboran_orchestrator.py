@@ -86,8 +86,21 @@ class IbOranOrchestrator:
                 shmSize=SHM_SIZE,
             )
             print("\nib-ORAN Orchestrator: 3GPP LTE established.")
+        elif self.rat_type == NR:
+            exp = Experiment(
+                "ns3iboran_nr",
+                "../../../..",
+                shm_py_binding,
+                segName="iboranSegment",
+                cpp2pyMsgName="iboranCpp2Py",
+                py2cppMsgName="iboranPy2Cpp",
+                lockableName="iboran",
+                handleFinish=True,
+                shmSize=SHM_SIZE,
+            )
+            print("\nib-ORAN Orchestrator: 3GPP NR established.")
         else:
-            raise TypeError("Invalid RAN standard: Maybe 'LTE'?")
+            raise TypeError("Invalid RAN standard: Maybe 'LTE' or 'NR'?")
 
         shm_interface = exp.run(show_output=True)
         print("\nib-ORAN Orchestrator: Shared memory interfaces established.")
@@ -150,7 +163,7 @@ class IbOranOrchestrator:
             self.dapp_scheduler.print_stats()
 
             self.kpi["PRBAllocationRatio"] = self.dapp_scheduler.sum_allocated_rb / (
-                MAX_PRB_NUM_LTE
+                MAX_PRB_NUM_LTE if self.rat_type == LTE else MAX_PRB_NUM_NR
             )
             if self.dapp_scheduler.step > 0:
                 self.kpi["DecisionTimeMs"] = (

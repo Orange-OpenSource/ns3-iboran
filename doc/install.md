@@ -18,8 +18,9 @@
 
 | Dependency | Version |
 |---|---|
-| [ns-3](https://gitlab.com/nsnam/ns-3-dev) | 3.46.1 |
+| [ns-3](https://gitlab.com/nsnam/ns-3-dev) | 3.48 |
 | [ns3-ai](https://github.com/hust-diangroup/ns3-ai/blob/main/docs/install.md) | 1.2.0 |
+| [ns-3 nr](https://gitlab.com/cttc-lena/nr) | 4.2 |
 | CMake | 3.10+ |
 | Boost C++ libraries | 1.89+ |
 | Protocol Buffers | 6.33.0+ |
@@ -29,13 +30,12 @@
 
 > **Tip:** It is strongly recommended to use a Python virtual environment (see [Python Dependencies Note](#python-dependencies-note) below).
 
-> **Tip:** It is strongly recommended to use a stable release of ns-3. Avoid unstable versions such as 3.47.
-
 
 ## Installation
 
 Ensure you have successfully installed [ns-3](https://gitlab.com/nsnam/ns-3-dev) along with its required components:
 - [ns3-ai](https://github.com/hust-diangroup/ns3-ai/blob/main/docs/install.md) — cloned into `contrib/ai`
+- [ns-3 nr](https://gitlab.com/cttc-lena/nr) — cloned into `contrib/nr`
 
 Then follow the steps below.
 
@@ -48,11 +48,13 @@ Clone ib-ORAN into the `contrib/iboran` directory inside your ns-3 root.
 
 Via SSH *(recommended for contributors)*:
 ```bash
+cd /path/to/ns-3
 git clone git@ghttps://github.com/Orange-OpenSource/ns3-iboran.git contrib/iboran
 ```
 
 Via HTTPS:
 ```bash
+cd /path/to/ns-3
 git clone https://github.com/Orange-OpenSource/ns3-iboran.git contrib/iboran
 ```
 
@@ -62,7 +64,6 @@ git clone https://github.com/Orange-OpenSource/ns3-iboran.git contrib/iboran
 From the ns-3 root directory, re-run configure and build to register the new contrib module:
 
 ```bash
-cd /path/to/ns-3
 ./ns3 configure --enable-examples --enable-tests
 ./ns3 build
 ```
@@ -73,6 +74,9 @@ cd /path/to/ns-3
 ```bash
 # LTE module
 ./ns3 build ns3iboran_lte
+
+# NR module
+./ns3 build ns3iboran_nr
 ```
 
 
@@ -81,7 +85,8 @@ cd /path/to/ns-3
 To allow Python to resolve ib-ORAN's modules correctly — whether running scripts directly or from a Jupyter notebook — add the following to your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-export PYTHONPATH="$(realpath /path/to/ns-3/contrib/iboran):$PYTHONPATH"
+cd /path/to/ns-3
+export PYTHONPATH="$(realpath ./contrib/iboran):$PYTHONPATH"
 ```
 
 Then reload your shell:
@@ -106,7 +111,7 @@ bash quick-setup.sh
 
 <a name="python-dependencies-note"></a>
 
-If a virtual environment was not created and activated during the ns3-ai installation, you must install the required Python packages manually:
+If you did not create and activate a virtual environment during the ns3-ai installation, you must manually activate your desired Python environment and install the required packages by running:
 
 ```bash
 pip install -e contrib/ai/python_utils
@@ -116,6 +121,8 @@ pip install -e contrib/ai/model/gym-interface/py
 Then rebuild ns-3 and the ib-ORAN module to apply the changes:
 
 ```bash
+./ns3 configure --enable-examples --enable-tests
 ./ns3 build
 ./ns3 build ns3iboran_lte
+./ns3 build ns3iboran_nr
 ```

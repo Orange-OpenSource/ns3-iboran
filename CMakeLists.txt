@@ -61,9 +61,12 @@ build_lib(
         ${IBORAN_COMMON_SOURCES}
         model/iboran_mac_scheduler/iboran-lte-mac-scheduler.h
         model/iboran_mac_scheduler/iboran-lte-mac-scheduler.cc
+        model/iboran_mac_scheduler/iboran-nr-mac-scheduler.h
+        model/iboran_mac_scheduler/iboran-nr-mac-scheduler.cc
     LIBRARIES_TO_LINK 
         ${IBORAN_COMMON_LIBS}
         ${liblte}
+        ${libnr}
 )
 
 # == PYTHON BINDINGS ================================================
@@ -103,6 +106,7 @@ if(BUILD_PYTHON_BINDINGS)
                         ${libiboran}
                         ${libcore}
                         ${liblte}
+                        ${libnr}
                         ${libbuildings}
                 )
                 

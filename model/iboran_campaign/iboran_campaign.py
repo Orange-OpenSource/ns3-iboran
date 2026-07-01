@@ -196,7 +196,7 @@ class IbOranCampaign:
         which_k: int | list[int],
         which_dapp_algo_ue_selection: str | list[str],
         which_xapp_algo_rbg_bounding: str | list[str],
-        which_rat: str | list[str] = [LTE],
+        which_rat: str | list[str] = [LTE, NR],
         append_title: str = "",
         save_dir: str | None = None,
     ):
@@ -339,7 +339,7 @@ class IbOranCampaign:
         which_kpi: list[str],
         which_dapp_algo_ue_selection: str | list[str],
         which_xapp_algo_rbg_bounding: str | list[str],
-        which_rat: str | list[str] = [LTE],
+        which_rat: str | list[str] = [LTE, NR],
         append_title: str = "",
         save_dir: str | None = None,
     ):
@@ -504,7 +504,7 @@ class IbOranCampaign:
         which_kpi: list[str],
         which_dapp_algo_ue_selection: str | list[str],
         which_xapp_algo_rbg_bounding: str | list[str],
-        which_rat: str | list[str] = [LTE],
+        which_rat: str | list[str] = [LTE, NR],
         append_title: str = "",
         decimals: int = 3,
     ):
@@ -621,7 +621,7 @@ class IbOranCampaign:
         which_xapp_algo_rbg_bounding: str | list[str],
         ref_algo: str,
         decimals: int = 2,
-        which_rat: str | list[str] = [LTE],
+        which_rat: str | list[str] = [LTE, NR],
         append_title: str = "",
     ):
         base_algos = {

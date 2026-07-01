@@ -20,6 +20,7 @@ namespace ns3
 
 #define MAX_UE_NUM 32
 #define MAX_PRB_NUM_LTE 100
+#define MAX_PRB_NUM_NR 264
 #define MAX_ID_LEN 32
 
 #define E3SM_INDICATION 0x01
@@ -31,6 +32,7 @@ namespace ns3
 struct RatType
 {
     static constexpr const char* LTE = "LTE";
+    static constexpr const char* NR = "NR";
 };
 
 enum LinkDirection

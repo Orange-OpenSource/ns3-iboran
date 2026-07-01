@@ -16,6 +16,7 @@ def assign_mcs(rat_type, e3Indication: E3Indication, selected_idx_k) -> list:
     """
     Maps CQI (0-15) to MCS (0-28/31) using extended 256-QAM table.
     LTE: TS 36.213 Tables 7.2.3-1 and 7.1.7.1-1
+    NR:  TS 38.214 Tables 5.2.2.1-2 and 5.1.3.1-1
     Target BLER < 10%.
     """
     mapper = DoMapping()

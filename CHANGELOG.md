@@ -7,7 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## 1.0.0-lte (2025-06-01)
+## 2.0.0 (2025-07-01)
+
+### Added
+- 3GPP NR RAT support based on the 5G-LENA NR module.
+
+
+## 1.0.0 (2025-06-01)
 
 ### Added
 - Initial public release of ib-ORAN.

@@ -44,7 +44,7 @@ SimParams::SimParams()
     common.backhaulDelay = 10.0;
 
     common.enableDlFlow = true;
-    common.dlTxRepeat = 1;
+    common.dlTxRepeat = 1; // TODO: Revise application layer to support multiple receptions
     common.dlPacketSize = 1400;
     common.dlBitRate = 200e3;
     common.dlMinInterval = 0.0;
@@ -88,6 +88,39 @@ SimParams::SimParams()
      */
     lte.p0NominalPusch = -96.0;
     /* Urban macrocell:  = (−96 to −106) [dBm] */
+
+    // -- NR Parameters --------------------------------------------------
+    nr.centralFrequency = 3.5e9;
+    /* 28 GHz (mmWave) or 3.5e9 (sub-6 GHz) */
+    nr.bandwidth = 100e6;
+    nr.numCc = 1;
+    nr.numBwp = 1;
+    nr.numerology = 1;
+    /*
+     * Numerology values:
+     * 0 -> 15 kHz SCS (similar to LTE)
+     * 1 -> 30 kHz SCS (typical for sub-6 GHz)
+     * 2 -> 60 kHz SCS (typical for mmWave)
+     * 3 -> 120 kHz SCS (high mobility, mmWave)
+     * 4 -> 240 kHz SCS (very high frequency)
+     * 5 -> 480 kHz SCS
+     * 6 -> 960 kHz SCS
+     */
+    // NOTE changing numerology, bandwidth, and freq. requires modifying 'MAX_PRB_NUM_NR'
+
+    nr.tddPattern = "DL|DL|DL|DL|F|UL|UL|UL|UL|F|";
+    /**
+     * Terminology: DL->Downlink, UL->Uplink, F->Flexible, S->Special slot
+     * Some examples:
+     * All downlink: "DL|DL|DL|DL|DL|DL|DL|DL|DL|DL|"
+     * Balanced: "DL|DL|DL|DL|F|UL|UL|UL|UL|F|"
+     * Downlink heavy: "DL|DL|DL|DL|DL|DL|DL|F|UL|UL|"
+     */
+
+    nr.gNbAntennaNumRows = 4;
+    nr.gNbAntennaNumColumns = 4;
+    nr.ueAntennaNumRows = 2;
+    nr.ueAntennaNumColumns = 2;
 }
 
 SimParams&
@@ -130,14 +163,15 @@ operator<<(std::ostream& os, const SimParams& params)
     const CommonRanParams& commonParams = params.GetCommonRanParams();
     os << "\n-- RAN Simulation Parameters ----------\n"
        << std::left << std::setw(30) << "Radio Access Technology Type" << ": "
-       << "LTE" << "\n"
+       << (params.GetRatType() == RatType::LTE ? "LTE" : "NR") << "\n"
        << std::setw(30) << "Simulation Time" << ": " << std::setw(1) << commonParams.simTime
        << " s\n"
        << std::setw(30) << "Simulation Area Length" << ": " << std::setw(1)
        << commonParams.simAreaLength << " m\n"
        << std::setw(30) << "Number of UEs" << ": " << std::setw(1) << commonParams.ueNum << "\n"
-       << std::setw(30) << "Number of eNodeBs" << ": " << std::setw(1) << commonParams.xnbNum
-       << "\n"
+       << std::setw(30)
+       << (params.GetRatType() == RatType::LTE ? "Number of eNodeBs" : "Number of gNBs") << ": "
+       << std::setw(1) << commonParams.xnbNum << "\n"
        << std::setw(30) << "Number of Remote Hosts" << ": " << std::setw(1)
        << commonParams.remoteHostNum << "\n"
        << std::setw(30) << "Handover Hysteresis" << ": " << std::setw(1)
@@ -148,7 +182,9 @@ operator<<(std::ostream& os, const SimParams& params)
        << commonParams.ueMinTxPower << " dBm\n"
        << std::setw(30) << "UE Max Transmission Power" << ": " << std::setw(1)
        << commonParams.ueMaxTxPower << " dBm\n"
-       << std::setw(30) << "eNodeB Transmission Power"
+       << std::setw(30)
+       << (params.GetRatType() == RatType::LTE ? "eNodeB Transmission Power"
+                                               : "gNB Transmission Power")
        << ": " << std::setw(1) << commonParams.xnbTxPower << " dBm\n"
        << std::setw(30) << "Pathloss Compensation Factor" << ": " << std::setw(1)
        << commonParams.compensationFactor << "\n"
@@ -216,6 +252,24 @@ operator<<(std::ostream& os, const SimParams& params)
            << lteParams.transmissionMode << "\n"
            << std::setw(30) << "Nominal PSD Target for PUSCH" << ": " << std::setw(1)
            << lteParams.p0NominalPusch << " dBm\n";
+    }
+    else if (params.GetRatType() == RatType::NR)
+    {
+        const NrParams& nrParams = params.GetNrParams();
+        os << "\n-- NR Specifications ------------------\n"
+           << std::setw(30) << "Central Frequency" << ": " << std::setw(1)
+           << nrParams.centralFrequency / 1e9 << " GHz\n"
+           << std::setw(30) << "Bandwidth" << ": " << std::setw(1) << nrParams.bandwidth / 1e6
+           << " MHz\n"
+           << std::setw(30) << "Component Carriers" << ": " << std::setw(1) << nrParams.numCc
+           << "\n"
+           << std::setw(30) << "Number of BWPs" << ": " << std::setw(1) << nrParams.numBwp << "\n"
+           << std::setw(30) << "Numerology" << ": " << std::setw(1) << nrParams.numerology << "\n"
+           << std::setw(30) << "TDD Pattern" << ": " << std::setw(1) << nrParams.tddPattern << "\n"
+           << std::setw(30) << "gNB Antenna Dimension" << ": " << std::setw(1)
+           << nrParams.gNbAntennaNumRows << " × " << nrParams.gNbAntennaNumColumns << "\n"
+           << std::setw(30) << "UE Antenna Dimension" << ": " << std::setw(1)
+           << nrParams.ueAntennaNumRows << " × " << nrParams.ueAntennaNumColumns << "\n";
     }
     return os;
 }

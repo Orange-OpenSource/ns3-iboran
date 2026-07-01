@@ -29,7 +29,7 @@ class RbgDemand:
         """
         Parameters
         ----------
-        rat_type        : LTE (from iboran_shm_structure)
+        rat_type        : LTE or NR (from iboran_shm_structure)
         n_layers        : number of MIMO layers (1 for SISO, >1 for spatial mux)
         dl_ctrl_symbols : PDCCH symbols reserved per slot (default 2 in 5G-LENA)
                           → effective data symbols = 14 - dl_ctrl_symbols
@@ -63,6 +63,9 @@ class RbgDemand:
             if self.rat_type == LTE:
                 prb_demand = self._compute_prb_lte(pending_bits, assigned_mcs_k[i])
                 prb_demand = min(prb_demand, MAX_PRB_NUM_LTE)
+            else:  # NR
+                prb_demand = self._compute_prb_nr(pending_bits, assigned_mcs_k[i])
+                prb_demand = min(prb_demand, MAX_PRB_NUM_NR)
 
             rbg_demand_k[i] = math.ceil(prb_demand / e3Indication.rbgSize)
 

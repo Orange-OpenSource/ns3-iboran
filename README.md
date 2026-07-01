@@ -4,7 +4,7 @@ An ns-3-based Open RAN simulation environment with native support for intent-bas
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://spdx.org/licenses/MIT.html)
 [![ns-3](https://img.shields.io/badge/ns--3-compatible-brightgreen)](https://www.nsnam.org)
-[![RAT](https://img.shields.io/badge/RAT-LTE-orange)](https://www.3gpp.org/)
+[![RAT](https://img.shields.io/badge/RAT-LTE%20%7C%20NR-orange)](https://www.3gpp.org/)
 <!-- [![ANR COMSEMA](https://img.shields.io/badge/Funded%20by-ANR%20COMSEMA-blueviolet)](https://sites.google.com/view/anrcomsema) -->
 
 ## License
@@ -41,8 +41,9 @@ ib-ORAN bridges high-performance ns-3 C++ simulations and Python-based policy lo
 
 Building on the foundations of [ns3-gym](https://github.com/tkn-tub/ns3-gym) and [ns3-ai](https://github.com/hust-diangroup/ns3-ai), ib-ORAN extends both frameworks with intent-based and semantics-aware capabilities purpose-built for Open RAN network control — going beyond reinforcement learning hooks to provide a full orchestration layer for intelligent, policy-driven RAN behavior.
 
-ib-ORAN supports the 3GPP LTE standard:
+ib-ORAN supports both 3GPP LTE and New Radio (NR) standards:
 - **LTE**: implemented through an adapted version of the built-in `lte` module in ns-3.
+- **NR**: built on top of the [ns-3 nr](https://gitlab.com/cttc-lena/nr) module.
 
 
 ## Architecture
@@ -88,10 +89,10 @@ All parameters are optional. If omitted, default values are used.
 
 | Parameter | Description | Default |
 |---|---|---|
-| `--rat_type` | Radio Access Technology: `"LTE"` | `"LTE"` |
+| `--rat_type` | Radio Access Technology: `"LTE"` or `"NR"` | `"LTE"` |
 | `--dapp_control_period_sf` | dApp control period (in subframes) | `1` |
 | `--xapp_control_period_f` | xApp control period (in frames) | `1` |
-| `--k` | Maximum parallel UEs scheduled per TTI | `1` |
+| `--k` | Maximum parallel UEs scheduled per TTI/slot | `1` |
 | `--dapp_algo_ue_selection` | dApp MAC scheduling algorithm (see [Built-In Algorithms](doc/built-in-algos.md)) | `"Random"` |
 | `--xapp_algo_rbg_bounding` | xApp RBG bounding algorithm | `"Bypass"` |
 | `--show_flowstats` | Print flow statistics to console: `"true"` or `"false"` | `"true"` |
@@ -107,8 +108,12 @@ python3 iboran_run.py
 # LTE with Random scheduler, k=1
 python3 iboran_run.py --rat_type="LTE" --k=1 --dapp_algo_ue_selection="Random"
 
+# NR with Intent-Oriented Top-k CQI scheduler, k=3
+python3 iboran_run.py --rat_type="NR" --k=3 --dapp_algo_ue_selection="iBTopKCqi"
+
 # Override a single argument
 python3 iboran_run.py --k=4
+python3 iboran_run.py --rat_type="NR"
 ```
 
 ### Default Simulation Setup
@@ -169,7 +174,7 @@ cd build
 
 1. Click **File → Open XML**
 2. Navigate to `iboran/notebook/netanim/`
-3. Open the generated XML file (`iboran-lte-anim.xml`)
+3. Open the generated XML file (`iboran-lte-anim.xml` or `iboran-nr-anim.xml`)
 
 
 ## Troubleshooting
@@ -224,6 +229,7 @@ Or the corresponding publication:
 
 - [ns-3 LTE Scheduler Documentation](https://www.nsnam.org/docs/models/html/lte-design.html#mac-scheduler)
 - [ns-3 LTE Design Overview](https://www.nsnam.org/docs/models/html/lte-design.html)
+- [5G-LENA (ns-3 NR) Documentation](https://cttc-lena.gitlab.io/nr/html/)
 - [3GPP Specifications](https://www.3gpp.org/)
 - [O-RAN Alliance](https://www.o-ran.org/)
 - [O-RAN E2 Interface Specification](https://www.o-ran.org/specifications)

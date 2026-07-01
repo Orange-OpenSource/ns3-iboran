@@ -27,6 +27,8 @@
 #include "ns3/mobility-module.h"
 #include "ns3/netanim-module.h"
 #include "ns3/network-module.h"
+#include <ns3/nr-ue-net-device.h>
+#include <ns3/nr-ue-rrc.h>
 
 #include <filesystem>
 

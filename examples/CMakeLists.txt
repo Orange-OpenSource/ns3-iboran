@@ -17,3 +17,13 @@ build_lib_example(
         ${libiboran}
         ${liblte}
 )
+
+# == NR =============================================================
+build_lib_example(
+    NAME ns3iboran_nr
+    SOURCE_FILES
+        ../model/iboran_ran_environment/iboran-nr-environment.cc
+    LIBRARIES_TO_LINK
+        ${libiboran}
+        ${libnr}
+)

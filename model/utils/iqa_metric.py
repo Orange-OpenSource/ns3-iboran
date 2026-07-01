@@ -200,7 +200,7 @@ class IQAMetric:
             model = CLIPModel.from_pretrained(local_dir, local_files_only=True)
             model.to(device)
             processor = CLIPProcessor.from_pretrained(
-                local_dir, use_fast=True, local_files_only=True
+                local_dir, backend="torchvision", local_files_only=True
             )
             print("CLIP model: Loaded from local directory.")
             return model, processor
@@ -209,7 +209,9 @@ class IQAMetric:
             try:
                 model = CLIPModel.from_pretrained(model_name)
                 model.to(device)
-                processor = CLIPProcessor.from_pretrained(model_name, use_fast=True)
+                processor = CLIPProcessor.from_pretrained(
+                    model_name, backend="torchvision"
+                )
                 print("CLIP model: Loaded online.")
                 return model, processor
 

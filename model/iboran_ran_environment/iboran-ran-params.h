@@ -76,6 +76,21 @@ struct LteParams
     double p0NominalPusch;     // nominal PSD target for PUSCH [dBm]
 };
 
+// == NR PARAMETERS =============================================================
+struct NrParams
+{
+    double centralFrequency;       // central frequency [Hz]
+    double bandwidth;              // bandwidth [Hz]
+    uint32_t numCc;                // number of component carriers (>= 1 & <= 16)
+    uint32_t numBwp;               // number of bandwidth parts (1-4)
+    uint32_t numerology;           // 3GPP 5G/NR numerology (0-6)
+    std::string tddPattern;        // TDD pattern
+    uint32_t gNbAntennaNumRows;    // number of rows in gNB antenna
+    uint32_t gNbAntennaNumColumns; // number of columns in gNB antenna
+    uint32_t ueAntennaNumRows;     // number of rows in UE antenna
+    uint32_t ueAntennaNumColumns;  // number of columns in UE antenna
+};
+
 // == MAIN CLASS ================================================================
 class SimParams
 {
@@ -117,12 +132,24 @@ class SimParams
         return lte;
     }
 
+    // accessors for NR parameters
+    NrParams& GetNrParams()
+    {
+        return nr;
+    }
+
+    const NrParams& GetNrParams() const
+    {
+        return nr;
+    }
+
   private:
     SimParams(); // private constructor for singleton
 
     std::string ratType;
     CommonRanParams common;
     LteParams lte;
+    NrParams nr;
 };
 
 std::ostream& operator<<(std::ostream& os, const SimParams& params);

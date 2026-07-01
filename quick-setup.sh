@@ -104,6 +104,15 @@ else
     echo -e "${GREEN}✓ ns3-ai module found${NC}"
 fi
 
+# check if nr ns-3 is installed
+if [ ! -d "../nr" ]; then
+    echo -e "${RED}✗ NR ns-3 not found in contrib/nr${NC}"
+    CHECK_FAILED=1
+else
+    echo -e "${GREEN}✓ NR ns-3 module found${NC}"
+fi
+
+
 # check boost 1.89+
 BREW_PREFIX=""
 if [[ "$OSTYPE" == "darwin"* ]] && command -v brew &>/dev/null; then
@@ -193,25 +202,6 @@ else
 fi
 
 
-# check pybind11 3.0+
-python3 -c "import pybind11" 2>/dev/null && {
-    PYBIND_VERSION=$(python3 -c "import pybind11; print(pybind11.__version__)")
-    PYBIND_MAJOR=$(echo $PYBIND_VERSION | cut -d. -f1)
-    PYBIND_MINOR=$(echo $PYBIND_VERSION | cut -d. -f2)
-    
-    if [ "$PYBIND_MAJOR" -lt 3 ] || ([ "$PYBIND_MAJOR" -eq 3 ] && [ "$PYBIND_MINOR" -lt 0 ]); then
-        echo -e "${RED}✗ pybind11 3.0+ required, found: $PYBIND_VERSION${NC}"
-        CHECK_FAILED=1
-    else
-        echo -e "${GREEN}✓ pybind11 $PYBIND_VERSION found${NC}"
-    fi
-} || {
-    echo -e "${RED}✗ pybind11 not found${NC}"
-    echo -e "${YELLOW}  Install: pip3 install pybind11${NC}"
-    CHECK_FAILED=1
-}
-
-
 # check for C++ compiler
 if command -v g++ &> /dev/null; then
     GCC_VERSION=$(g++ --version | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+|[0-9]+\.[0-9]+' | head -n1)
@@ -269,12 +259,15 @@ REQUIRED_FILES=(
     "model/iboran_interfaces/iboran_shm_structure.py"
     "model/iboran_interfaces/iboran_shm_structure_py_binding.cc"
     "model/iboran_ran_environment/iboran-lte-environment.cc"
+    "model/iboran_ran_environment/iboran-nr-environment.cc"
     "model/iboran_ran_environment/iboran-ran-params.h"
     "model/iboran_ran_environment/iboran-ran-params.cc"
     "model/iboran_ran_environment/iboran-ran-common.h"
     "model/iboran_ran_environment/iboran-ran-common.cc"
     "model/iboran_mac_scheduler/iboran-lte-mac-scheduler.h"
     "model/iboran_mac_scheduler/iboran-lte-mac-scheduler.cc"
+    "model/iboran_mac_scheduler/iboran-nr-mac-scheduler.h"
+    "model/iboran_mac_scheduler/iboran-nr-mac-scheduler.cc"
     "model/iboran_campaign/iboran_orchestrator.py"
     "model/iboran_campaign/iboran_run.py"
     "model/iboran_campaign/iboran_campaign.py"
@@ -347,6 +340,24 @@ python3 -c "import ns3ai_utils" 2>/dev/null && {
     fi
 }
 
+# # check pybind11 3.0+
+# python3 -c "import pybind11" 2>/dev/null && {
+#     PYBIND_VERSION=$(python3 -c "import pybind11; print(pybind11.__version__)")
+#     PYBIND_MAJOR=$(echo $PYBIND_VERSION | cut -d. -f1)
+#     PYBIND_MINOR=$(echo $PYBIND_VERSION | cut -d. -f2)
+    
+#     if [ "$PYBIND_MAJOR" -lt 3 ] || ([ "$PYBIND_MAJOR" -eq 3 ] && [ "$PYBIND_MINOR" -lt 0 ]); then
+#         echo -e "${RED}✗ pybind11 3.0+ required, found: $PYBIND_VERSION${NC}"
+#         CHECK_FAILED=1
+#     else
+#         echo -e "${GREEN}✓ pybind11 $PYBIND_VERSION found${NC}"
+#     fi
+# } || {
+#     echo -e "${RED}✗ pybind11 not found${NC}"
+#     echo -e "${YELLOW}  Install: pip3 install pybind11${NC}"
+#     CHECK_FAILED=1
+# }
+
 # check/install pybind11 in venv
 python3 -c "import pybind11" 2>/dev/null && {
     echo -e "${GREEN}✓ pybind11 available in virtual environment${NC}"
@@ -416,7 +427,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo -e "\n${YELLOW}Starting test...${NC}"
     
     # start Python agent in background
-    python3 iboran_run.py --rat_type "LTE" --dapp_algo_ue_selection "Random" --k 5 --save_dapp_log false --dapp_control_period_sf 8
+    python3 iboran_run.py --rat_type "NR" --dapp_algo_ue_selection "Random" --k 5 --save_dapp_log false --dapp_control_period_sf 8
     
     echo -e "\n${GREEN}✓ Test completed!${NC}"
     echo "If you saw scheduling decisions being made, everything is working!"

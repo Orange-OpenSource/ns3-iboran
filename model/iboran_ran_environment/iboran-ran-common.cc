@@ -162,6 +162,11 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             Ptr<LteUeNetDevice> ueDev = DynamicCast<LteUeNetDevice>(ueDevs.Get(ueCount));
             rntiGetter = [ueDev]() { return ueDev->GetRrc()->GetRnti(); };
         }
+        else
+        {
+            Ptr<NrUeNetDevice> ueDev = DynamicCast<NrUeNetDevice>(ueDevs.Get(ueCount));
+            rntiGetter = [ueDev]() { return ueDev->GetRrc()->GetRnti(); };
+        }
 
         // -- DOWNLINK FLOW ------------------------------------------
         if (commonParams.enableDlFlow)

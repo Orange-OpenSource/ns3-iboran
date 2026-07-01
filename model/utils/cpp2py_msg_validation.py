@@ -12,7 +12,7 @@ from model.iboran_interfaces.iboran_shm_structure import *
 
 
 def e3_indication_validation(e3Indication: E3Indication, rat_type=LTE):
-    max_prb_num = MAX_PRB_NUM_LTE
+    max_prb_num = MAX_PRB_NUM_LTE if rat_type == LTE else MAX_PRB_NUM_NR
     errors = []
 
     if e3Indication.type != E3SM_INDICATION:
@@ -124,7 +124,7 @@ def e3_indication_validation(e3Indication: E3Indication, rat_type=LTE):
 
 
 def e2_kpm_report_validation(e2KpmReport, rat_type=LTE):
-    max_prb_num = MAX_PRB_NUM_LTE
+    max_prb_num = MAX_PRB_NUM_LTE if rat_type == LTE else MAX_PRB_NUM_NR
     errors = []
 
     if e2KpmReport.type != E2SM_KPM_REPORT:
