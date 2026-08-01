@@ -12,9 +12,10 @@ import os
 import json
 import joblib
 import numpy as np
+import dataclasses
 
 
-class DoLog:
+class FileStore:
     def __init__(self, script_dir=None, folder_name="logs", log_name="log_no_name"):
         self.script_dir = script_dir
         self.folder_name = folder_name
@@ -67,4 +68,6 @@ class DoLog:
             return float(obj)
         if isinstance(obj, np.ndarray):
             return obj.tolist()
+        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            return dataclasses.asdict(obj)
         raise TypeError(f"Type {type(obj)} not serializable")

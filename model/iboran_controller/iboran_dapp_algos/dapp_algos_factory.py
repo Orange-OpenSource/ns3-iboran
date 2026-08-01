@@ -28,13 +28,11 @@ from model.iboran_controller.iboran_dapp_algos.dapp_algo_ue_selection_dp import 
     DAppAlgoUeSelectionDp,
 )
 
-# Standalone algos with no metric variation
 _STANDALONE = {
     "Random": DAppAlgoUeSelectionRandom,
     "RoundRobin": DAppAlgoUeSelectionRoundRobin,
 }
 
-# Parametric families: prefix → class
 _FAMILIES = {
     "TopK": DAppAlgoUeSelectionTopK,
     "Greedy": DAppAlgoUeSelectionGreedy,
@@ -42,6 +40,12 @@ _FAMILIES = {
 }
 
 _VALID_METRICS = {"Cqi", "BufferLevel", "PropFairness", "Criticality", "MultiCriteria"}
+
+BASE_DAPP_ALGOS_KEYS = set(_STANDALONE) | {
+    f"{family}{metric}" for family in _FAMILIES for metric in _VALID_METRICS
+}
+
+PROP_FAIRNESS_TUNING_FACTOR = 0.1
 
 
 def setup_dapp_algo_ue_selection(

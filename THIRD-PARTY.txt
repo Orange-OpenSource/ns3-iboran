@@ -96,6 +96,33 @@ For the full text of the GNU General Public License v2.0, see:
 https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
 
 ================================================================================
+
+================================================================================
+THIRD-PARTY DATASETS (NOT DISTRIBUTED)
+================================================================================
+
+The following datasets are supported by ib-ORAN but are NOT bundled with
+this repository. Users must download them separately from the original
+source and are bound by that source's terms.
+
+1. Market-1501
+--------------------------------------------------------------------------------
+   Source:      https://zheng-lab-anu.github.io/Project/project_reid.html
+   Mirror:      https://www.kaggle.com/datasets/pengcw1/market-1501
+   Terms:       Research use only, non-commercial. No redistribution rights
+                granted by the original authors.
+   Citation:    Zheng, L., Shen, L., Tian, L., Wang, S., Wang, J., & Tian, Q.
+                (2015). Scalable Person Re-identification: A Benchmark.
+                ICCV 2015.
+
+   Usage in ib-ORAN:
+   Optional benchmark dataset for the dApp/xApp intent-matching pipeline
+   (see doc/simulation-data.md). Not included in this repository; place
+   downloaded contents in /notebook/dataset/market-1501.
+
+================================================================================
+
+================================================================================
 CONFIDENTIALITY NOTICE
 ================================================================================
 

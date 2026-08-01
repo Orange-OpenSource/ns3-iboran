@@ -25,6 +25,10 @@ _FAMILIES = {}
 
 _VALID_METRICS = {}
 
+BASE_XAPP_ALGOS_KEYS = set(_STANDALONE) | {
+    f"{family}{metric}" for family in _FAMILIES for metric in _VALID_METRICS
+}
+
 
 def setup_xapp_algo_rbg_bounding(
     algo_name: str, intents, rat_type

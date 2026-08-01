@@ -31,9 +31,36 @@
 #include <ns3/nr-ue-rrc.h>
 
 #include <filesystem>
+#include <map>
+#include <random>
+#include <string>
+#include <vector>
 
 namespace ns3
 {
+
+// == P2CPP PARAMS STRUCTURE ==========================================
+struct Py2CppParams
+{
+    std::string id;
+    std::string repository;
+    std::string inputImageFormat;
+    std::string inputPattern;
+    std::string outputPattern;
+    std::vector<std::string> inputFields;
+    std::vector<std::string> outputFields;
+    std::vector<int> oidRange;
+};
+
+Py2CppParams LoadPy2CppParams(const std::filesystem::path& filepath);
+
+std::string BuildOutputFilename(const Py2CppParams& params,
+                                const std::map<std::string, std::string>& values);
+
+std::string ResolveInputFile(const std::filesystem::path& baseDir,
+                             const Py2CppParams& params,
+                             const std::map<std::string, std::string>& values,
+                             std::mt19937& gen);
 
 // == MOBILITY FUNCTIONS ==============================================
 void SetupBackhaulMobility(const CommonRanParams& commonParams,

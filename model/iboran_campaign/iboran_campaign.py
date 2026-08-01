@@ -14,16 +14,24 @@ import subprocess
 import matplotlib.pyplot as plt
 from IPython.display import display
 from itertools import product
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import tol_colors as tc
 import shutil
 import os
 
-from model.iboran_campaign.iboran_orchestrator import IbOranOrchestrator
-from model.iboran_interfaces.iboran_shm_structure import *
-from model.utils.do_log import DoLog
+from model.iboran_interfaces.iboran_shm_protocol import LinkDirection, RatType
 
-LINKS = ["UPLINK", "DOWNLINK"]
+from model.iboran_kpi.iboran_kpi_iqa import IbOranIQA
+from model.iboran_kpi.iboran_kpi_ecs import IbOranECS
+from model.iboran_campaign.iboran_orchestrator import _BASE_KPI_TEMPLATES, LINKS
+from model.utils.file_store import FileStore
+
+_FIDELITY_TEMPLATES_BY_FORMAT = {
+    "IMAGE": IbOranIQA.METRIC_TEMPLATES,
+    "VIDEO": None,
+    "EMBEDDING": IbOranECS.METRIC_TEMPLATES,
+    "TEXT": None,
+}
 
 
 class IbOranCampaign:
@@ -32,22 +40,23 @@ class IbOranCampaign:
         run_cwd,
         run_env,
         mc_iterations=1,
-        show_flowstats="false",
-        show_iqa_diagnosis="false",
+        dataset_id="toy",
+        data_format="IMAGE",
+        embedder="TransReID",
+        oid_range=[1, 2],
         save_dapp_log="false",
+        verbose="false",
     ):
         self.run_cwd = run_cwd
         self.run_env = run_env
         self.mc_iterations = mc_iterations
-        self.show_flowstats = show_flowstats
-        self.show_iqa_diagnosis = show_iqa_diagnosis
+        self.dataset_id = dataset_id
+        self.data_format = data_format
+        self.embedder = embedder
+        self.oid_range = oid_range
         self.save_dapp_log = save_dapp_log
+        self.verbose = verbose
 
-        self.orchestrator = IbOranOrchestrator()
-        self._reset_variables()
-        self._setup_plot_params()
-
-    def _reset_variables(self):
         self.results = []
 
     def run(
@@ -58,7 +67,7 @@ class IbOranCampaign:
         dom_k,
         dom_dapp_algo_ue_selection,
         dom_xapp_algo_rbg_bounding,
-    ):
+    ) -> pd.DataFrame:
         dom_combinations = list(
             product(
                 dom_rat_type,
@@ -113,6 +122,8 @@ class IbOranCampaign:
             .reset_index()
         )
 
+        self._setup_plot_params()
+
         return self.df
 
     def _run_single(
@@ -124,15 +135,17 @@ class IbOranCampaign:
         dapp_algo_ue_selection,
         xapp_algo_rbg_bounding,
         mc_idx,
-    ):
-        records_logger = DoLog(
+    ) -> list[dict]:
+        records_store = FileStore(
             script_dir=".",
             folder_name="logs/run_logs",
             log_name=f"{rat_type}{dapp_control_period_sf}{xapp_control_period_f}"
-            f"{k}{dapp_algo_ue_selection}{xapp_algo_rbg_bounding}{mc_idx}.joblib",
+            f"{k}{dapp_algo_ue_selection}{xapp_algo_rbg_bounding}{mc_idx}"
+            f"{self.dataset_id}{self.data_format}{self.embedder}"
+            f"{''.join(map(str, self.oid_range))}.joblib",
         )
-        if records_logger.exists():
-            saved_records = records_logger.joblib_load()
+        if records_store.exists():
+            saved_records = records_store.joblib_load()
             return saved_records
 
         self._cleanup()
@@ -147,17 +160,20 @@ class IbOranCampaign:
                 f"--k={k}",
                 f"--dapp_algo_ue_selection={dapp_algo_ue_selection}",
                 f"--xapp_algo_rbg_bounding={xapp_algo_rbg_bounding}",
-                f"--show_flowstats={self.show_flowstats}",
-                f"--show_iqa_diagnosis={self.show_iqa_diagnosis}",
-                f"--save_dapp_log={self.save_dapp_log}",
+                f"--dataset_id={self.dataset_id}",
+                f"--data_format={self.data_format}",
+                f"--embedder={self.embedder}",
+                f"--oid_range={','.join(map(str, self.oid_range))}",
+                f"--save_dapp_log={'true' if self.save_dapp_log else 'false'}",
+                f"--verbose={'true' if self.verbose else 'false'}",
             ],
-            capture_output=True,
-            text=True,
+            capture_output=self.verbose,
+            text=self.verbose,
             cwd=self.run_cwd,
             env=self.run_env,
         )
 
-        kpi = DoLog(".", "logs", "kpi.json").json_load()
+        kpi = FileStore(".", "logs", "kpi.json").json_load()
 
         records = [
             {
@@ -170,20 +186,20 @@ class IbOranCampaign:
                 "mc_idx": mc_idx,
                 "link": link,
                 **{
-                    key: kpi[key][link]
-                    for key in self.orchestrator.kpi.keys()
-                    if isinstance(kpi[key], dict)
+                    key: value[str(link.value)]["measure"]
+                    for key, value in kpi.items()
+                    if "measure" not in value
                 },
                 **{
-                    key: kpi[key]
-                    for key in self.orchestrator.kpi.keys()
-                    if not isinstance(kpi[key], dict)
+                    key: value["measure"]
+                    for key, value in kpi.items()
+                    if "measure" in value
                 },
             }
             for link in LINKS
         ]
 
-        records_logger.joblib_dump(records)
+        records_store.joblib_dump(records)
         return records
 
     def plot_kpi_vs_param_per_algo(
@@ -196,10 +212,10 @@ class IbOranCampaign:
         which_k: int | list[int],
         which_dapp_algo_ue_selection: str | list[str],
         which_xapp_algo_rbg_bounding: str | list[str],
-        which_rat: str | list[str] = [LTE, NR],
+        which_rat: str | list[str] = [RatType.LTE, RatType.NR],
         append_title: str = "",
         save_dir: str | None = None,
-    ):
+    ) -> None:
         base_params = {
             "dapp_control_period_sf": which_dapp_control_period_sf,
             "xapp_control_period_f": which_xapp_control_period_f,
@@ -294,12 +310,13 @@ class IbOranCampaign:
                             ax.plot(
                                 df_algo[against],
                                 df_algo[_kpi],
-                                marker=("o" if algo.startswith("iB") else "s"),
+                                marker=("o" if algo.startswith("ib") else "s"),
                                 color=self.algo_kwds[algo]["color"],
                                 label=self.algo_kwds[algo]["label"],
                             )
                         ax.set_ylabel(
-                            self.kpi_kwds[_kpi]["label"], fontsize=self.small_fontsize
+                            f'{self.kpi_kwds[_kpi]["label"]} {self.kpi_kwds[_kpi]["unit"]}',
+                            fontsize=self.small_fontsize,
                         )
                         ax.set_xlabel(
                             self.param_kwds[against]["label"],
@@ -327,7 +344,7 @@ class IbOranCampaign:
                         self._save_subplot(
                             file_name=os.path.join(save_dir, f"{rat}_{link}_{kpi}.png"),
                             plot_fn=plot_fn,
-                            title=f'{"Uplink" if link == "UPLINK" else "Downlink"}',
+                            title=f"{link}",
                         )
 
             plt.tight_layout()
@@ -339,10 +356,10 @@ class IbOranCampaign:
         which_kpi: list[str],
         which_dapp_algo_ue_selection: str | list[str],
         which_xapp_algo_rbg_bounding: str | list[str],
-        which_rat: str | list[str] = [LTE, NR],
+        which_rat: str | list[str] = [RatType.LTE, RatType.NR],
         append_title: str = "",
         save_dir: str | None = None,
-    ):
+    ) -> None:
         base_algos = {
             "dapp_algo_ue_selection": which_dapp_algo_ue_selection,
             "xapp_algo_rbg_bounding": which_xapp_algo_rbg_bounding,
@@ -433,8 +450,8 @@ class IbOranCampaign:
                         figsize=(subplot_size[0] * 2, subplot_size[1]),
                     )
 
-                    dl_df, dl_algos = link_data["DOWNLINK"][kpi]
-                    ul_df, ul_algos = link_data["UPLINK"][kpi]
+                    dl_df, dl_algos = link_data[LinkDirection.DOWNLINK][kpi]
+                    ul_df, ul_algos = link_data[LinkDirection.UPLINK][kpi]
 
                     self._draw_bar_kpi(ax_dl, dl_df, per, kpi, dl_algos)
                     self._draw_bar_kpi(ax_ul, ul_df, per, kpi, ul_algos)
@@ -461,11 +478,11 @@ class IbOranCampaign:
                 full_df = self.df[rat_mask]
 
                 if not full_df.empty:
-                    fidelity_cols = [
-                        "StructuralFidelity",
-                        "ContentFidelity",
-                        "SemanticFidelity",
-                    ]
+                    fidelity_templates = (
+                        _FIDELITY_TEMPLATES_BY_FORMAT.get(self.data_format) or {}
+                    )
+                    fidelity_cols = list(fidelity_templates.keys())
+
                     cols_to_avg = list(
                         dict.fromkeys(
                             which_kpi
@@ -504,10 +521,10 @@ class IbOranCampaign:
         which_kpi: list[str],
         which_dapp_algo_ue_selection: str | list[str],
         which_xapp_algo_rbg_bounding: str | list[str],
-        which_rat: str | list[str] = [LTE, NR],
+        which_rat: str | list[str] = [RatType.LTE, RatType.NR],
         append_title: str = "",
         decimals: int = 3,
-    ):
+    ) -> None:
         base_algos = {
             "dapp_algo_ue_selection": which_dapp_algo_ue_selection,
             "xapp_algo_rbg_bounding": which_xapp_algo_rbg_bounding,
@@ -539,13 +556,16 @@ class IbOranCampaign:
                 df_algo.index.name = None
                 df_algo.columns = pd.MultiIndex.from_tuples(
                     [
-                        (self.kpi_kwds[kpi]["label"], stat)
+                        (
+                            f'{self.kpi_kwds[kpi]["label"]} {self.kpi_kwds[kpi]["unit"]}',
+                            stat,
+                        )
                         for kpi, stat in df_algo.columns
                     ],
                     names=["kpi", "stat"],
                 )
                 df_algo.columns.names = ["KPI", "Statistics"]
-                df_algo = df_algo.reindex(["UPLINK", "DOWNLINK"])
+                df_algo = df_algo.reindex(LINKS)
 
                 def style_table(styler: "pd.Styler") -> "pd.Styler":
                     fmt = {col: f"{{:.{decimals}f}}" for col in df_algo.columns}
@@ -621,9 +641,9 @@ class IbOranCampaign:
         which_xapp_algo_rbg_bounding: str | list[str],
         ref_algo: str,
         decimals: int = 2,
-        which_rat: str | list[str] = [LTE, NR],
+        which_rat: str | list[str] = [RatType.LTE, RatType.NR],
         append_title: str = "",
-    ):
+    ) -> None:
         base_algos = {
             "dapp_algo_ue_selection": which_dapp_algo_ue_selection,
             "xapp_algo_rbg_bounding": which_xapp_algo_rbg_bounding,
@@ -655,20 +675,32 @@ class IbOranCampaign:
 
             gain_df.columns.names = ["KPI", "Algorithm"]
             gain_df.index.name = None
-            gain_df = gain_df.reindex(["UPLINK", "DOWNLINK"])
+            gain_df = gain_df.reindex(LINKS)
 
             gain_df.columns = pd.MultiIndex.from_tuples(
-                [(self.kpi_kwds[kpi]["label"], algo) for kpi, algo in gain_df.columns],
+                [
+                    (
+                        f'{self.kpi_kwds[kpi]["label"]} {self.kpi_kwds[kpi]["unit"]}',
+                        algo,
+                    )
+                    for kpi, algo in gain_df.columns
+                ],
                 names=["KPI", "Algorithm"],
             )
 
             gain_df = gain_df.reindex(
                 columns=pd.MultiIndex.from_tuples(
                     [
-                        (self.kpi_kwds[kpi]["label"], self._algo_label(a))
+                        (
+                            f'{self.kpi_kwds[kpi]["label"]} {self.kpi_kwds[kpi]["unit"]}',
+                            self._algo_label(a),
+                        )
                         for kpi in which_kpi
                         for a in compare_algos
-                        if (self.kpi_kwds[kpi]["label"], self._algo_label(a))
+                        if (
+                            f'{self.kpi_kwds[kpi]["label"]} {self.kpi_kwds[kpi]["unit"]}',
+                            self._algo_label(a),
+                        )
                         in gain_df.columns
                     ],
                     names=["KPI", "Algorithm"],
@@ -747,12 +779,12 @@ class IbOranCampaign:
             print(f"-- {rat} RAT {append_title} --")
             display(styled)
 
-    def _draw_bar_kpi(self, ax, depict_df, per, kpi, algos_sorted):
+    def _draw_bar_kpi(self, ax, depict_df, per, kpi, algos_sorted) -> None:
         algos_pos = range(len(algos_sorted))
         for pos_idx, algo in zip(algos_pos, algos_sorted):
             df_algo = depict_df[depict_df[per] == algo]
-            edgecolor = "white" if algo.startswith("iB") else "black"
-            if not kpi == "IntentSatisfactionScore":
+            edgecolor = "white" if algo.startswith("ib") else "black"
+            if not kpi == "SatisfactionScore":
                 ax.bar(
                     pos_idx,
                     df_algo[kpi].mean(),
@@ -764,56 +796,49 @@ class IbOranCampaign:
                     label=self.algo_kwds[algo]["label"],
                     edgecolor=edgecolor,
                     linewidth=0.5,
-                    hatch="\\" if algo.startswith("iB") else "",
+                    hatch="\\" if algo.startswith("ib") else "",
+                )
+                kpi_y_label = (
+                    f'{self.kpi_kwds[kpi]["label"]} {self.kpi_kwds[kpi]["unit"]}'
                 )
             else:
-                structural_fid = 0.3 * df_algo["StructuralFidelity"].mean()
-                content_fid = 0.3 * df_algo["ContentFidelity"].mean()
-                semantic_fid = 0.2 * df_algo["SemanticFidelity"].mean()
-                ax.bar(
-                    pos_idx,
-                    structural_fid,
-                    alpha=0.8,
-                    color=self.algo_kwds[algo]["color"],
-                    capsize=5,
-                    label="Structural Fidelity",
-                    edgecolor=edgecolor,
-                    linewidth=1.5,
-                    hatch="///",
-                )
-                ax.bar(
-                    pos_idx,
-                    content_fid,
-                    bottom=structural_fid,
-                    alpha=0.8,
-                    color=self.algo_kwds[algo]["color"],
-                    capsize=5,
-                    label="Content Fidelity",
-                    edgecolor=edgecolor,
-                    linewidth=1.5,
-                    hatch="",
-                )
-                ax.bar(
-                    pos_idx,
-                    semantic_fid,
-                    bottom=content_fid + structural_fid,
-                    alpha=0.8,
-                    color=self.algo_kwds[algo]["color"],
-                    capsize=5,
-                    label="Semantic Fidelity",
-                    edgecolor=edgecolor,
-                    linewidth=1.5,
-                    hatch="//",
-                )
+                components = [
+                    (kpi, self.kpi_kwds[kpi]["label"], ""),
+                    ("FidelityScore", "Fidelity Score", "//"),
+                ]
+                n_components = len(components)
+                bar_gap = 0.1
+                bar_width = 0.8 / n_components
+                drawn_width = bar_width * (1 - bar_gap)
+
+                for comp_idx, (col, comp_label, hatch) in enumerate(components):
+                    offset = (comp_idx - (n_components - 1) / 2) * bar_width
+                    ax.bar(
+                        pos_idx + offset,
+                        df_algo[col].mean(),
+                        width=drawn_width,
+                        alpha=0.8,
+                        color=self.algo_kwds[algo]["color"],
+                        capsize=5,
+                        label=comp_label,
+                        edgecolor=edgecolor,
+                        linewidth=1.5,
+                        hatch=hatch,
+                    )
+
                 handles, legend_labels = ax.get_legend_handles_labels()
+                kpi_y_label = "Intent-Based KPIs"
                 ax.legend(
-                    handles[2::-1],
-                    legend_labels[2::-1],
+                    handles[:n_components],
+                    legend_labels[:n_components],
                     fontsize=self.small_fontsize,
-                    loc="lower center",
+                    loc="center right",
                 )
 
-        ax.set_ylabel(self.kpi_kwds[kpi]["label"], fontsize=self.small_fontsize)
+        ax.set_ylabel(
+            kpi_y_label,
+            fontsize=self.small_fontsize,
+        )
         ax.set_xticks(list(algos_pos))
         labels = [self.algo_kwds[algo]["label"] for algo in algos_sorted]
         ax.set_xticklabels(
@@ -888,28 +913,12 @@ class IbOranCampaign:
         df.columns = pd.MultiIndex.from_tuples(df.columns, names=["kpi", "algo"])
         return df.sort_index()
 
-    def _setup_plot_params(self):
+    def _setup_plot_params(self) -> None:
+        fidelity_templates = _FIDELITY_TEMPLATES_BY_FORMAT.get(self.data_format) or {}
+        all_templates = {**_BASE_KPI_TEMPLATES, **fidelity_templates}
         self.kpi_kwds = {
-            "PDR": {"label": "Packet Delivery Ratio [%]", "sort": "desc"},
-            "Throughput": {"label": "Throughput [kbps]", "sort": "desc"},
-            "Latency": {"label": "Latency [ms]", "sort": "asc"},
-            "Jitter": {"label": "Jitter [ms]", "sort": "asc"},
-            "IntentSatisfactionScore": {
-                "label": "Intent Satisfaction Score",
-                "sort": "desc",
-            },
-            "FidelityScore": {"label": "Fidelity Score", "sort": "desc"},
-            "SemanticFidelity": {"label": "Semantic Fidelity", "sort": "desc"},
-            "ContentFidelity": {"label": "Content Fidelity", "sort": "desc"},
-            "StructuralFidelity": {
-                "label": "Structural Fidelity",
-                "sort": "desc",
-            },
-            "PRBAllocationRatio": {
-                "label": "PRB Allocation Ratio",
-                "sort": "asc",
-            },
-            "DecisionTimeMs": {"label": "Decision Time [ms]", "sort": "asc"},
+            key: {"label": kpi.label, "unit": kpi.unit, "sort": kpi.sort}
+            for key, kpi in all_templates.items()
         }
         self.param_kwds = {
             "rat_type": {"label": "RAT Type"},
@@ -920,24 +929,24 @@ class IbOranCampaign:
             "xapp_algo_rbg_bounding": {"label": "xApp RBG bounding Algorithm"},
         }
         self.algo_kwds = {
-            "iBRandom": {"color": tc.vibrant[6], "label": "IB Random"},
+            "ibRandom": {"color": tc.vibrant[6], "label": "IB Random"},
             "Random": {"color": tc.vibrant[6], "label": "Random"},
-            "iBRoundRobin": {"color": tc.vibrant[5], "label": "IB R. Robin"},
+            "ibRoundRobin": {"color": tc.vibrant[5], "label": "IB R. Robin"},
             "RoundRobin": {"color": tc.vibrant[5], "label": "R. Robin"},
-            "iBTopKCqi": {"color": tc.light[0], "label": "IB Top-K: CQI"},
-            "iBTopKBufferLevel": {
+            "ibTopKCqi": {"color": tc.light[0], "label": "IB Top-K: CQI"},
+            "ibTopKBufferLevel": {
                 "color": tc.light[1],
                 "label": "IB Top-K: Buffer Level",
             },
-            "iBTopKPropFairness": {
+            "ibTopKPropFairness": {
                 "color": tc.light[2],
                 "label": "IB Top-K: Prop. Fairn.",
             },
-            "iBTopKCriticality": {
+            "ibTopKCriticality": {
                 "color": tc.light[3],
                 "label": "IB Top-K: Criticality",
             },
-            "iBTopKMultiCriteria": {
+            "ibTopKMultiCriteria": {
                 "color": tc.light[4],
                 "label": "IB Top-K: Multi-Criteria",
             },
@@ -949,20 +958,20 @@ class IbOranCampaign:
                 "color": tc.light[4],
                 "label": "Top-K: Multi-Criteria",
             },
-            "iBGreedyCqi": {"color": tc.vibrant[0], "label": "IB Greedy: CQI"},
-            "iBGreedyBufferLevel": {
+            "ibGreedyCqi": {"color": tc.vibrant[0], "label": "IB Greedy: CQI"},
+            "ibGreedyBufferLevel": {
                 "color": tc.vibrant[1],
                 "label": "IB Greedy: Buffer Level",
             },
-            "iBGreedyPropFairness": {
+            "ibGreedyPropFairness": {
                 "color": tc.vibrant[2],
                 "label": "IB Greedy: Prop. Fairn.",
             },
-            "iBGreedyCriticality": {
+            "ibGreedyCriticality": {
                 "color": tc.vibrant[3],
                 "label": "IB Greedy: Criticality",
             },
-            "iBGreedyMultiCriteria": {
+            "ibGreedyMultiCriteria": {
                 "color": tc.vibrant[4],
                 "label": "IB Greedy: Multi-Criteria",
             },
@@ -983,11 +992,11 @@ class IbOranCampaign:
                 "color": tc.vibrant[4],
                 "label": "Greedy: Multi-Criteria",
             },
-            "iBDpCqi": {"color": tc.dark[0], "label": "IB DP: CQI"},
-            "iBDpBufferLevel": {"color": tc.dark[1], "label": "IB DP: Buffer Level"},
-            "iBDpPropFairness": {"color": tc.dark[2], "label": "IB DP: Prop. Fairn."},
-            "iBDpCriticality": {"color": tc.dark[3], "label": "IB DP: Criticality"},
-            "iBDpMultiCriteria": {
+            "ibDpCqi": {"color": tc.dark[0], "label": "IB DP: CQI"},
+            "ibDpBufferLevel": {"color": tc.dark[1], "label": "IB DP: Buffer Level"},
+            "ibDpPropFairness": {"color": tc.dark[2], "label": "IB DP: Prop. Fairn."},
+            "ibDpCriticality": {"color": tc.dark[3], "label": "IB DP: Criticality"},
+            "ibDpMultiCriteria": {
                 "color": tc.dark[4],
                 "label": "IB DP: Multi-Criteria",
             },
@@ -1001,7 +1010,7 @@ class IbOranCampaign:
         self.big_fontsize = 15
         self.small_fontsize = 13
 
-    def _save_subplot(self, file_name, plot_fn, title=None, figsize=(5, 5)):
+    def _save_subplot(self, file_name, plot_fn, title=None, figsize=(5, 5)) -> None:
         fig_single, ax_single = plt.subplots(figsize=figsize)
         plot_fn(ax_single)
         if title:
@@ -1009,7 +1018,7 @@ class IbOranCampaign:
         fig_single.savefig(file_name, dpi=150, bbox_inches="tight")
         plt.close(fig_single)
 
-    def _cleanup(self):
+    def _cleanup(self) -> None:
         paths = {"dataset_dscv": os.path.join(".", "dataset_dscv")}
         for name, path in paths.items():
             if os.path.exists(path):

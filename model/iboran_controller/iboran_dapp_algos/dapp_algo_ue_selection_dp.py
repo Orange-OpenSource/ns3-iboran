@@ -8,15 +8,16 @@
 #
 # Authors: see CONTRIBUTORS.md
 
-from model.iboran_interfaces.iboran_shm_structure import *
-from .dapp_algo_ue_selection import DAppAlgoUeSelection
 import numpy as np
+from .dapp_algo_ue_selection import DAppAlgoUeSelection
 
 
 class DAppAlgoUeSelectionDp(DAppAlgoUeSelection):
+    _ID_PREFIX = "Dp"
+
     def __init__(self, k, intents, rat_type, metric: str):
-        super().__init__(k, intents, rat_type)
-        self.id = "Dp" + metric
+        super().__init__(k, intents, rat_type, algo_id=f"{self._ID_PREFIX}{metric}")
+
         self._reset_variables()
         self._bind_metric_fn()
 

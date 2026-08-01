@@ -9,24 +9,7 @@
 # Authors: see CONTRIBUTORS.md
 
 from ctypes import *
-
-MAX_UE_NUM = 32
-MAX_PRB_NUM_LTE = 100
-MAX_PRB_NUM_NR = 264
-MAX_ID_LEN = 64
-
-E3SM_INDICATION = 0x01
-E3SM_CONTROL = 0x02
-
-E2SM_KPM_REPORT = 0x11
-E2SM_RC_CONTROL = 0x12
-
-LTE = "LTE"
-NR = "NR"
-
-DOWNLINK = 0
-UPLINK = 1
-
+from model.iboran_interfaces.iboran_shm_protocol import ProtocolLimits
 
 # == E2SM-KPM REPORT STRUCTURE =======================================
 # make sure to keep in sync with 'iboran-e2-structure.h'
@@ -38,7 +21,7 @@ class UeE2KpmReport(Structure):
         ("rnti", c_uint16),
         ("cqi", c_uint8),
         ("bufferLevel", c_uint32),
-        ("contentId", c_char * MAX_ID_LEN),
+        ("contentId", c_char * ProtocolLimits.MAX_ID_LEN),
         ("qci", c_uint8),
         ("achievableRate", c_double),
         ("actualThroughput", c_double),
@@ -59,7 +42,7 @@ class E2KpmReport(Structure):
         ("rbgSize", c_int),
         ("linkDirection", c_uint8),
         ("id", c_uint32),
-        ("ue", UeE2KpmReport * MAX_UE_NUM),
+        ("ue", UeE2KpmReport * ProtocolLimits.MAX_UE_NUM),
     ]
 
 
@@ -81,7 +64,7 @@ class E2RcControl(Structure):
         ("skipThisStep", c_bool),
         ("linkDirection", c_uint8),
         ("id", c_uint32),
-        ("ue", UeE2RcControl * MAX_UE_NUM),
+        ("ue", UeE2RcControl * ProtocolLimits.MAX_UE_NUM),
     ]
 
 
@@ -96,7 +79,7 @@ class UeE3Indication(Structure):
         ("cqi", c_uint8),
         ("bufferLevel", c_uint32),
         ("contentCriticality", c_uint8),
-        ("contentId", c_char * MAX_ID_LEN),
+        ("contentId", c_char * ProtocolLimits.MAX_ID_LEN),
         ("qci", c_uint8),
         ("achievableRate", c_double),
         ("actualThroughput", c_double),
@@ -119,7 +102,7 @@ class E3Indication(Structure):
         ("rbgSize", c_int),
         ("linkDirection", c_uint8),
         ("id", c_uint32),
-        ("ue", UeE3Indication * MAX_UE_NUM),
+        ("ue", UeE3Indication * ProtocolLimits.MAX_UE_NUM),
     ]
 
 
@@ -143,7 +126,7 @@ class E3Control(Structure):
         ("skipThisStep", c_bool),
         ("linkDirection", c_uint8),
         ("id", c_uint32),
-        ("ue", UeE3Control * MAX_UE_NUM),
+        ("ue", UeE3Control * ProtocolLimits.MAX_UE_NUM),
     ]
 
 

@@ -9,14 +9,15 @@
 # Authors: see CONTRIBUTORS.md
 
 import random
-from model.iboran_interfaces.iboran_shm_structure import *
 from .dapp_algo_ue_selection import DAppAlgoUeSelection
 
 
 class DAppAlgoUeSelectionRandom(DAppAlgoUeSelection):
+    _ID_PREFIX = "Random"
+
     def __init__(self, k, intents, rat_type):
-        super().__init__(k, intents, rat_type)
-        self.id = "Random"
+        super().__init__(k, intents, rat_type, algo_id=self._ID_PREFIX)
+
         self._reset_variables()
 
     def process(self, candidates, e3Indication, **kwargs) -> bool:

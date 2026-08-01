@@ -1,0 +1,129 @@
+# Software Name: ib-ORAN
+# SPDX-FileCopyrightText: Copyright (c) Orange SA
+# SPDX-License-Identifier: MIT
+#
+# This software is distributed under the MIT license,
+# see the "LICENSE" file for more details
+# or https://spdx.org/licenses/MIT.html
+#
+# Authors: see CONTRIBUTORS.md
+
+
+rat_type: LTE   # LTE | NR
+
+# ============================================================
+# ns-3 RAN Environment Configuration
+# ============================================================
+
+common:
+  simTime: 20.0                 # [s]
+  simAreaLength: 500.0          # [m]
+  ueNum: 6
+  xnbNum: 1                     # number of eNodeBs (LTE) / gNBs (NR)
+  remoteHostNum: 1
+
+  handoverHysteresis: 3.0       # [dB]
+  handoverTimeToTrigger: 256    # [ms]
+
+  ueMinTxPower: -40.0           # [dBm]
+  ueMaxTxPower: 23.0            # [dBm]
+  xnbTxPower: 46.0              # [dBm] -- urban macrocell: 46; micro/pico-cell: 30-33
+  compensationFactor: 0.8       # urban macrocell: 0.7-0.8; small cell: 0.4-0.6
+
+  backhaulDataRate: "100Gbps"
+  backhaulMtu: 1500             # [bytes]
+  backhaulDelay: 10.0           # [ms]
+
+  enableDlFlow: true
+  dlTxRepeat: 1                 # TODO: app layer doesn't yet support multiple receptions
+  dlPacketSize: 512             # [bytes]
+  dlBitRate: 200000             # [bps]
+  dlUseUdp: true
+
+  enableUlFlow: true
+  ulTxRepeat: 1
+  ulPacketSize: 512             # [bytes]
+  ulBitRate: 100000             # [bps]
+  ulUseUdp: true
+
+  enableIbOranSchedCoreLog: false
+  enableRrcLog: false
+
+lte:
+  dlEarfcn: 2750    # downlink EARFCN 2750: 2620-2690 MHz, band 7
+  ulEarfcn: 20750   # uplink EARFCN 20750: 2500-2570 MHz, band 7
+  # Calculate 4G LTE EARFCN: https://5g-tools.com/4g-lte-earfcn-calculator/
+  dlRbNum: 100      # 100 RBs: 20 MHz bandwidth
+  ulRbNum: 100      # 100 RBs: 20 MHz bandwidth
+  # NOTE: since RbNum=100 is the default assumed by the fading traces,
+  # do not change it unless also changing the fading model (see MAX_PRB_NUM_LTE).
+  transmissionMode: 2
+  # 3GPP transmission modes (TMs):
+  #   TM1 -> SISO, 1x1 antenna, single layer
+  #   TM2 -> Closed-loop 2x2 MIMO, 2 layers, uses UE feedback (CQI/PMI/RI)
+  #   TM3 -> Open-loop 2x2 MIMO, 2 layers, fixed precoding (no feedback)
+  #   TM4 -> Closed-loop rank-1 precoding, 2x2 MIMO, single layer, UE feedback
+  #   TM5 -> Multi-user MIMO, 2x2 MIMO, serves multiple UEs on same resources
+  #   TM6 -> Closed-loop SU-MIMO with rank adaptation, 2x2 MIMO
+  #   TM7 -> Advanced 4x2 MIMO, multiple UEs, advanced precoding
+  # NOTE: in ns-3.42, TM1-TM3 are fully implemented; TM4-TM7 may be limited.
+  p0NominalPusch: -96.0   # [dBm] -- urban macrocell: -96 to -106
+
+nr:
+  centralFrequency: 3.5e9   # [Hz] -- 28e9 (mmWave) or 3.5e9 (sub-6 GHz)
+  bandwidth: 100e6          # [Hz]
+  numCc: 1
+  numBwp: 1
+  numerology: 1
+  # Numerology values: 0->15kHz SCS, 1->30kHz, 2->60kHz, 3->120kHz, 4->240kHz,
+  # 5->480kHz, 6->960kHz SCS.
+  # NOTE: changing numerology/bandwidth/centralFrequency requires also
+  # updating MAX_PRB_NUM_NR.
+  tddPattern: "DL|DL|DL|DL|F|UL|UL|UL|UL|F|"
+  # DL=Downlink, UL=Uplink, F=Flexible, S=Special slot. Examples:
+  #   all-downlink:    "DL|DL|DL|DL|DL|DL|DL|DL|DL|DL|"
+  #   balanced:        "DL|DL|DL|DL|F|UL|UL|UL|UL|F|"
+  #   downlink-heavy:  "DL|DL|DL|DL|DL|DL|DL|F|UL|UL|"
+  gNbAntennaNumRows: 4
+  gNbAntennaNumColumns: 4
+  ueAntennaNumRows: 2
+  ueAntennaNumColumns: 2
+
+# ============================================================
+# Orchestrator Configuration
+# ============================================================
+
+orchestrator:
+  k: 1                                # max parallel UEs scheduled per TTI/slot
+  dapp_control_period_sf: 1           # dApp control period [subframes]
+  xapp_control_period_f: 1            # xApp control period [frames]
+  dapp_algo_ue_selection: "Random"    # see doc/built-in-algos.md
+  xapp_algo_rbg_bounding: "Bypass"    # see doc/built-in-algos.md
+  dataset_id: "toy"                   # "toy" | "market-1501"
+  data_format: "IMAGE"                # "IMAGE" | "VIDEO" | "EMBEDDING" | "TEXT"
+  embedder: "TransReID"               # "TransReID" | "CLIP"
+  oid_range: [1, 2]                   # [low, high], inclusive range of object IDs
+  save_dapp_log: false
+  verbose: true
+
+# ============================================================
+# Datasets Configuration
+# ============================================================
+
+datasets:
+  toy:
+    repository: "toy"
+    input_image_format: ".png"
+    input_pattern: "%02d"
+    output_pattern: "%s_%d_ueidx_%d"
+    input_fields: [object_id]
+    output_fields: [abbr, object_id, idx]
+
+  market-1501:
+    repository: "market-1501"
+    input_image_format: ".jpg"
+    input_pattern: "%04d_c%d*"
+    output_pattern: "%s_%04d_c%d"
+    input_fields: [object_id, camera_id]
+    output_fields: [abbr, object_id, idx]
+ 

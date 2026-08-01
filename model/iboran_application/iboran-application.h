@@ -38,7 +38,6 @@ enum class DataFormat
     VIDEO,     /**< video data (H.264, H.265 frames) */
     EMBEDDING, /**< embeddings (float vectors) */
     TEXT,      /**< text data */
-    CUSTOM     /**< custom binary data */
 };
 
 std::string GetFileExtension(DataFormat format);
@@ -77,6 +76,7 @@ class IbOranTransmissionApplication : public Application
     void SetLinkDirection(LinkDirection direction);
 
     void SetUeObjectId(std::string objectId);
+    void SetInputImageFormat(std::string format);
 
   protected:
     void StartApplication() override;
@@ -92,6 +92,9 @@ class IbOranTransmissionApplication : public Application
     void RefreshRntiCriticality(Ptr<Packet> packet);
     void PublishRntiCriticality() const;
     void PublishRntiObjectId() const;
+
+    // ensure that the packet size is compatible with the EMBEDDING format
+    void EnforceEmbeddingPacketSize();
 
     void AnalyzePngStructure();
     uint8_t GetCriticalityForByteRange(uint32_t byteOffset, uint32_t length);
@@ -115,12 +118,13 @@ class IbOranTransmissionApplication : public Application
     bool m_useUdp;
     LinkDirection m_linkDirection; // link direction (UPLINK or DOWNLINK)
 
-    Ptr<Socket> m_socket;        // socket for data transmission
-    Address m_peer;              // destination address
-    std::vector<uint8_t> m_data; // data buffer to transmit
-    std::string m_ueObjectId;    // UE content ID
-    EventId m_sendEvent;         // event for scheduling next packet send
-    Time m_firstPacketTime;      // time when first packet is sent
+    Ptr<Socket> m_socket;           // socket for data transmission
+    Address m_peer;                 // destination address
+    std::vector<uint8_t> m_data;    // data buffer to transmit
+    std::string m_ueObjectId;       // UE content ID
+    std::string m_inputImageFormat; // input image format based on selected dataset
+    EventId m_sendEvent;            // event for scheduling next packet send
+    Time m_firstPacketTime;         // time when first packet is sent
     std::function<uint16_t()> m_rntiGetter;
     std::map<std::pair<uint16_t, LinkDirection>, uint8_t>
         m_rntiCriticality; // RNTI to criticality map

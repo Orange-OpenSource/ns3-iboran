@@ -7,6 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## 2.1.0 (2025-08-01)
+
+### Added
+- A standalone KPI definition module, `iboran_kpi`, providing shared foundations for KPI measurement across data formats.
+- A unified simulation parameter configuration module, `iboranConfig.yaml`, consolidating LTE/NR RAN parameters and simulation variables (e.g. `k`, the maximum parallel UEs scheduled per TTI/slot). Individual parameters can still be overridden via CLI flags when running `iboran_run.py`.
+- Configurable per-dataset filename patterns (`datasets:` section in `iboranConfig.yaml`), enabling datasets with irregular naming — e.g. Market-1501 — instead of the previous fixed `input_dl_<id>.png` scheme.
+- Implemented end-to-end "EMBEDDING" data format support: CLIP and TransReID extraction backends.
+
+### Changed
+- Refactored dApp/xApp control-loop logic into a shared `IbOranController` base class; statistics collection is now centralized rather than duplicated per app.
+- Replaced wildcard imports and scattered magic constants with explicit imports and centralized enums (`LinkDirection`, `RatType`, `MessageType`, `ProtocolLimits`).
+- E2SM-DAPP CONTROL verification failures now raise `ValueError` instead of printing a warning and continuing.
+- New dependencies: `pydantic`, `ruamel.yaml`, `gdown`.
+
+### Removed
+- `DataFormat::CUSTOM` is no longer a supported data format.
+
+
 ## 2.0.0 (2025-07-01)
 
 ### Added

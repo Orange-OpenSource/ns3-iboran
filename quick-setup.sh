@@ -275,6 +275,8 @@ REQUIRED_FILES=(
     "model/iboran_controller/iboran_xapp.py"
     "model/iboran_controller/iboran_dapp_algos/dapp_algos_factory.py"
     "model/iboran_controller/iboran_xapp_algos/xapp_algos_factory.py"
+    "model/iboran_kpi/iboran_kpi.py"
+    "model/iboran_kpi/iboran_kpi_iqa.py"
     "CMakeLists.txt"
 )
 
@@ -427,10 +429,9 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo -e "\n${YELLOW}Starting test...${NC}"
     
     # start Python agent in background
-    python3 iboran_run.py --rat_type "NR" --dapp_algo_ue_selection "Random" --k 5 --save_dapp_log false --dapp_control_period_sf 8
+    python3 iboran_run.py
     
     echo -e "\n${GREEN}✓ Test completed!${NC}"
-    echo "If you saw scheduling decisions being made, everything is working!"
 fi
 
 echo ""

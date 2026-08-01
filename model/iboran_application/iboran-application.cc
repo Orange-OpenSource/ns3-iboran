@@ -60,14 +60,10 @@ GetFileExtension(DataFormat format)
         fileFormat = ".mp4";
         break;
     case DataFormat::EMBEDDING:
-        fileFormat = ".npy";
+        fileFormat = ".f32";
         break;
     case DataFormat::TEXT:
         fileFormat = ".txt";
-        break;
-    case DataFormat::CUSTOM:
-        fileFormat = ".dat";
-        std::cout << "WARNING: Using custom format with .dat extension." << std::endl;
         break;
     default:
         fileFormat = ".bin";
@@ -94,9 +90,6 @@ GetQciForDataFormat(DataFormat format)
         break;
     case DataFormat::TEXT:
         qci = 3;
-        break;
-    case DataFormat::CUSTOM:
-        qci = 9;
         break;
     default:
         qci = 9;
@@ -149,7 +142,7 @@ IbOranTransmissionApplication::GetTypeId()
 }
 
 IbOranTransmissionApplication::IbOranTransmissionApplication()
-    : m_format(DataFormat::CUSTOM),
+    : m_format(DataFormat::IMAGE),
       m_packetSize(1024),
       m_bitRateBps(1000000),
       m_minPacketIntervalMs(0),
@@ -161,7 +154,8 @@ IbOranTransmissionApplication::IbOranTransmissionApplication()
       m_connected(false),
       m_cachedRnti(0),
       m_useUdp(true),
-      m_linkDirection(LinkDirection::UPLINK)
+      m_linkDirection(LinkDirection::UPLINK),
+      m_inputImageFormat(".png")
 {
     NS_LOG_FUNCTION(this);
 }
@@ -180,7 +174,11 @@ IbOranTransmissionApplication::LoadData(std::string filePath, DataFormat format)
 {
     NS_LOG_FUNCTION(this << filePath << (int)format);
 
-    filePath += GetFileExtension(format);
+    std::string extension = (format == DataFormat::IMAGE && !m_inputImageFormat.empty())
+                                ? m_inputImageFormat
+                                : GetFileExtension(format);
+
+    filePath += extension;
 
     std::ifstream file(filePath, std::ios::binary | std::ios::ate);
     if (!file.is_open())
@@ -201,11 +199,25 @@ IbOranTransmissionApplication::LoadData(std::string filePath, DataFormat format)
         return;
     }
 
+    if (format == DataFormat::EMBEDDING && (size % 4 != 0))
+    {
+        std::cerr << "EMBEDDING file size " << size << " not a multiple of 4 — corrupt .f32"
+                  << std::endl;
+        m_data.clear();
+        file.close();
+        return;
+    }
+
     file.close();
     m_format = format;
     m_dataOffset = 0;
 
     m_originalData = m_data;
+
+    if (m_format == DataFormat::EMBEDDING)
+    {
+        EnforceEmbeddingPacketSize();
+    }
 
     NS_LOG_INFO("Loaded data: " << filePath << " | Format: " << FormatToString(format)
                                 << " | Size: " << size << " bytes");
@@ -314,8 +326,6 @@ IbOranTransmissionApplication::FormatToString(DataFormat format) const
         return "EMBEDDING";
     case DataFormat::TEXT:
         return "TEXT";
-    case DataFormat::CUSTOM:
-        return "CUSTOM";
     default:
         return "UNKNOWN";
     }
@@ -341,6 +351,13 @@ IbOranTransmissionApplication::SetUeObjectId(std::string objectId)
     m_ueObjectId = objectId;
 }
 
+void
+IbOranTransmissionApplication::SetInputImageFormat(std::string format)
+{
+    NS_LOG_FUNCTION(this << format);
+    m_inputImageFormat = format;
+}
+
 // -- PROTECTED METHODS ----------------------------------------------------
 void
 IbOranTransmissionApplication::StartApplication()
@@ -356,6 +373,11 @@ IbOranTransmissionApplication::StartApplication()
     if (m_format == DataFormat::IMAGE && GetFileExtension(m_format) == ".png")
     {
         AnalyzePngStructure();
+    }
+
+    if (m_format == DataFormat::EMBEDDING)
+    {
+        EnforceEmbeddingPacketSize();
     }
 
     //   1. TCP is a stream protocol — the receiver cannot rely on Send() boundaries
@@ -545,6 +567,36 @@ IbOranTransmissionApplication::GetRnti() const
 }
 
 void
+IbOranTransmissionApplication::EnforceEmbeddingPacketSize()
+{
+    if (m_format != DataFormat::EMBEDDING)
+    {
+        return;
+    }
+
+    const uint32_t kMaxEmbeddingPacket = 1500; // since we are using UDP, keep it under typical MTU
+    if (m_packetSize > kMaxEmbeddingPacket)
+    {
+        NS_LOG_WARN("EMBEDDING packet size " << m_packetSize << " exceeds max "
+                                             << kMaxEmbeddingPacket << " — clamping");
+        m_packetSize = kMaxEmbeddingPacket;
+    }
+
+    // align to a 4-byte (float32) boundary so packets never split a float.
+    if (m_packetSize % 4 != 0)
+    {
+        uint32_t adjusted = (m_packetSize / 4) * 4; // round DOWN to nearest multiple of 4
+        if (adjusted == 0)
+        {
+            adjusted = 4; // never allow a zero-size packet
+        }
+        NS_LOG_WARN("EMBEDDING packet size " << m_packetSize
+                                             << " not divisible by 4 — adjusting to " << adjusted);
+        m_packetSize = adjusted;
+    }
+}
+
+void
 IbOranTransmissionApplication::AnalyzePngStructure()
 {
     if (m_format != DataFormat::IMAGE || GetFileExtension(m_format) != ".png")
@@ -686,7 +738,7 @@ IbOranReceptionApplication::GetTypeId()
 }
 
 IbOranReceptionApplication::IbOranReceptionApplication()
-    : m_format(DataFormat::CUSTOM),
+    : m_format(DataFormat::IMAGE),
       m_rxTotalBytes(0),
       m_packetCount(0),
       m_useUdp(true)

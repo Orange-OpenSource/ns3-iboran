@@ -8,21 +8,22 @@
 #
 # Authors: see CONTRIBUTORS.md
 
-from model.iboran_interfaces.iboran_shm_structure import *
 from .dapp_algo_ue_selection import DAppAlgoUeSelection
 
 
 class DAppAlgoUeSelectionRoundRobin(DAppAlgoUeSelection):
+    _ID_PREFIX = "RoundRobin"
+
     def __init__(self, k, intents, rat_type):
-        super().__init__(k, intents, rat_type)
-        self.id = "RoundRobin"
+        super().__init__(k, intents, rat_type, algo_id=self._ID_PREFIX)
+
         self._reset_variables()
 
     def process(self, candidates, e3Indication, **kwargs) -> bool:
         "Execute the UE selection."
         _hist_link_rnti_subframe = kwargs.get("_hist_link_rnti_subframe", {})
         subframe_candidates = [
-            _hist_link_rnti_subframe.get(f"{e3Indication.linkDirection}").get(
+            _hist_link_rnti_subframe.get(e3Indication.linkDirection).get(
                 e3Indication.ue[i].rnti,
                 (e3Indication.frameNo * 10 + e3Indication.subframeNo),
             )

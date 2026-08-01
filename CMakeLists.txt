@@ -13,6 +13,8 @@ cmake_minimum_required(VERSION 3.10)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+find_package(yaml-cpp REQUIRED)
+
 set(name iboran)
 
 include_directories(
@@ -47,6 +49,7 @@ set(IBORAN_COMMON_LIBS
     ${libflow-monitor}
     ${libbuildings}
     ${libnetanim}
+    yaml-cpp::yaml-cpp
 )
 
 if(UNIX AND NOT APPLE)

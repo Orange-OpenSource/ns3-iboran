@@ -1,4 +1,6 @@
-# Installation Guide
+# Installation and Testing Guide
+
+Complete, step-by-step instructions for building ib-ORAN on top of ns-3.
 
 ## Table of Contents
 
@@ -9,12 +11,13 @@
    - [Step 3: Build the ib-ORAN Module](#step-3-build-the-ib-oran-module)
    - [Step 4: Set Python Path](#step-4-set-python-path)
    - [Step 5: Run the Quick Setup Script](#step-5-run-the-quick-setup-script)
-3. [Python Dependencies Note](#python-dependencies-note)
+3. [Testing](#testing)
+   - [Parameters](#parameters)
+   - [Examples](#examples)
+4. [Python Dependencies Note](#python-dependencies-note)
 
 
 ## Prerequisites
-
-**Required Software:**
 
 | Dependency | Version |
 |---|---|
@@ -34,13 +37,13 @@
 ## Installation
 
 Ensure you have successfully installed [ns-3](https://gitlab.com/nsnam/ns-3-dev) along with its required components:
+
 - [ns3-ai](https://github.com/hust-diangroup/ns3-ai/blob/main/docs/install.md) — cloned into `contrib/ai`
 - [ns-3 nr](https://gitlab.com/cttc-lena/nr) — cloned into `contrib/nr`
 
 Then follow the steps below.
 
 > **Tip:** If you encounter configuration errors related to inconsistent function definitions while installing ns3-ai, try deleting the `/examples` folder and rebuilding.
-
 
 ### Step 1: Clone the Repository
 
@@ -49,7 +52,7 @@ Clone ib-ORAN into the `contrib/iboran` directory inside your ns-3 root.
 Via SSH *(recommended for contributors)*:
 ```bash
 cd /path/to/ns-3
-git clone git@ghttps://github.com/Orange-OpenSource/ns3-iboran.git contrib/iboran
+git clone git@github.com:Orange-OpenSource/ns3-iboran.git contrib/iboran
 ```
 
 Via HTTPS:
@@ -57,7 +60,6 @@ Via HTTPS:
 cd /path/to/ns-3
 git clone https://github.com/Orange-OpenSource/ns3-iboran.git contrib/iboran
 ```
-
 
 ### Step 2: Re-Configure and Re-Build ns-3
 
@@ -68,7 +70,6 @@ From the ns-3 root directory, re-run configure and build to register the new con
 ./ns3 build
 ```
 
-
 ### Step 3: Build the ib-ORAN Module
 
 ```bash
@@ -78,7 +79,6 @@ From the ns-3 root directory, re-run configure and build to register the new con
 # NR module
 ./ns3 build ns3iboran_nr
 ```
-
 
 ### Step 4: Set Python Path
 
@@ -95,7 +95,6 @@ Then reload your shell:
 source ~/.bashrc   # or ~/.zshrc
 ```
 
-
 ### Step 5: Run the Quick Setup Script
 
 The `quick-setup.sh` script automates all remaining steps: virtual environment setup, Python dependency installation, and verification.
@@ -104,6 +103,42 @@ The `quick-setup.sh` script automates all remaining steps: virtual environment s
 cd contrib/iboran
 chmod +x quick-setup.sh
 bash quick-setup.sh
+```
+
+
+## Testing
+
+```bash
+python3 iboran_run.py [--rat_type RAT_TYPE] [--k K] [--dapp_algo_ue_selection ALGO] ...
+```
+
+All parameters are optional. If omitted, default values are used.
+
+### Parameters:
+
+| Parameter | Description | Default |
+|---|---|---|
+| `--rat_type` | Radio Access Technology: `"LTE"` or `"NR"` | `"LTE"` |
+| `--k` | Maximum parallel UEs scheduled per TTI/slot | `1` |
+| `--dapp_control_period_sf` | dApp control period (in subframes) | `1` |
+| `--xapp_control_period_f` | xApp control period (in frames) | `1` |
+| `--dapp_algo_ue_selection` | dApp MAC scheduling algorithm (see the [Built-In Algorithms](/doc/built-in-algos.md)) | `"Random"` |
+| `--xapp_algo_rbg_bounding` | xApp RBG bounding algorithm (see the [Built-In Algorithms](/doc/built-in-algos.md)) | `"Bypass"` |
+| `--dataset_id` | Identifier of the dataset: `"toy"` or `"market-1501"` | `"toy"` |
+| `--data_format` | Application data format: `"IMAGE"`, `"VIDEO"`, `"EMBEDDING"`, or `"TEXT"` | `"IMAGE"` |
+| `--embedder` | Embedding extraction model: `"TransReID"` or `"CLIP"` | `"TransReID"` |
+| `--oid_range` | Range of object IDs for intent generation (format: `low,high`) | `1,2` |
+| `--save_dapp_log` | Save dApp control log to file: `true` or `false` | `false` |
+| `--verbose` | Print statistics and KPIs' summary to console: `true` or `false` | `true` |
+
+### Examples:
+
+```bash
+# Run with all defaults
+python3 iboran_run.py
+
+# NR with Intent-Based Top-k CQI scheduler, k=3, rest set as default
+python3 iboran_run.py --rat_type="NR" --k=3 --dapp_algo_ue_selection="ibTopKCqi"
 ```
 
 

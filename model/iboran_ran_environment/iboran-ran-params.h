@@ -107,10 +107,10 @@ class SimParams
         return ratType;
     }
 
-    void LoadFromCommandLine(int argc, char* argv[]);
+    void LoadFromYaml(const std::string& filepath);
+
     void Print(std::ostream& os) const;
 
-    // accessors for common parameters
     CommonRanParams& GetCommonRanParams()
     {
         return common;
@@ -121,7 +121,6 @@ class SimParams
         return common;
     }
 
-    // accessors for LTE parameters
     LteParams& GetLteParams()
     {
         return lte;
@@ -132,7 +131,6 @@ class SimParams
         return lte;
     }
 
-    // accessors for NR parameters
     NrParams& GetNrParams()
     {
         return nr;
@@ -144,7 +142,7 @@ class SimParams
     }
 
   private:
-    SimParams(); // private constructor for singleton
+    SimParams();
 
     std::string ratType;
     CommonRanParams common;

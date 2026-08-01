@@ -45,12 +45,19 @@ log_*
 logs/
 .flowstats/
 results*/
-clip_model/
+dapp_ml_convg/
+models/
 eval_data/
 netanim/
 dataset_dscv/
 libtensorflow/
 libtorch/
+
+notebook/dataset/market-1501/*
+!notebook/dataset/market-1501/.gitkeep
+
+# Binary data files
+*.f32
 
 # Protobuf files
 *.pb.cc

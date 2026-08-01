@@ -9,21 +9,20 @@
 # Authors: see CONTRIBUTORS.md
 
 import numpy as np
-from model.iboran_interfaces.iboran_shm_structure import *
 from .xapp_algo_rbg_bounding import XAppAlgoRbgBounding
 
 
 class XAppAlgoRbgBoundingBypass(XAppAlgoRbgBounding):
     def __init__(self, intents, rat_type):
-        super().__init__(intents, rat_type)
-        self.id = "Bypass"
+        super().__init__(intents, rat_type, algo_id="Bypass")
+
         self._reset_variables()
 
     def process(self, candidates, e2KpmReport, **kwargs) -> bool:
         "Execute the RBG bounding."
-        self.candidated_idx = candidates
+        self.candidate_idx = candidates
         self.bounded_rbg = e2KpmReport.numRbg * np.ones(
-            len(self.candidated_idx), dtype=int
+            len(self.candidate_idx), dtype=int
         )
 
         return True

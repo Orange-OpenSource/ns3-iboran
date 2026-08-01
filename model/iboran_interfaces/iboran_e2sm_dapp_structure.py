@@ -9,31 +9,26 @@
 # Authors: see CONTRIBUTORS.md
 
 from dataclasses import dataclass, field
-
-E2SM_DAPP_REPORT = 0x21
-E2SM_DAPP_CONTROL = 0x22
-
-DOWNLINK = 0
-UPLINK = 1
+from model.iboran_interfaces.iboran_shm_protocol import LinkDirection, MessageType
 
 
 @dataclass
 class E2DAppReport:  # from dApp to xApp
-    type: int = E2SM_DAPP_REPORT
+    type: int = MessageType.E2SM_DAPP_REPORT
     ueSchedSize: int = 0
     numAllocatedRbg: int = 0
     rbgSize: int = 1
-    linkDirection: int = DOWNLINK
+    linkDirection: int = LinkDirection.DOWNLINK
     id: int = 0
 
 
 @dataclass
 class E2DAppControl:  # from xApp to dApp
-    type: int = E2SM_DAPP_CONTROL
+    type: int = MessageType.E2SM_DAPP_CONTROL
     maxUeSchedSize: int = 0
     numAvailableRbg: int = 0
     skipThisStep: bool = False
-    linkDirection: int = DOWNLINK
+    linkDirection: int = LinkDirection.DOWNLINK
     id: int = 0
 
 

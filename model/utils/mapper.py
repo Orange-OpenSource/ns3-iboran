@@ -8,27 +8,27 @@
 #
 # Authors: see CONTRIBUTORS.md
 
-from model.iboran_interfaces.iboran_shm_structure import *
 import numpy as np
+from model.iboran_interfaces.iboran_shm_protocol import RatType
 
 
-class DoMapping:
+class Mapper:
     def __init__(self):
         pass
 
     @staticmethod
-    def bandwidth_to_rbg_size(bandwidth=10):
-        "Standard bandwidth to rbg size mapping."
+    def bandwidth_to_rbg_size(bandwidth=10) -> int:
         """
+        Standard bandwidth to rbg size mapping.
+
         LTE uses Type 0 resource allocation, where the downlink bandwidth is divided
-        into RBGs of varying sizes depending on the total number of RBs available. 
+        into RBGs of varying sizes depending on the total number of RBs available.
         This function returns the appropriate RBG size index for the given bandwidth.
         The mapping is as follows (see 3GPP TS 36.213, Table 7.1.6.1-1):
         - If 63 < dlBandwidth <= 110 -> returns 4
         - If 26 < dlBandwidth <= 63  -> returns 3
         - If 10 < dlBandwidth <= 26  -> returns 2
         - If dlBandwidth <= 10  -> returns 1
-        - Otherwise, returns -1 indicating an invalid bandwidth.
         """
         type0_allocation_rbg_dict = {
             1: 10,  # For smallest bandwidths (RBG size 1)
@@ -42,7 +42,7 @@ class DoMapping:
         raise ValueError("Bandwidth value is not correctly initialized.")
 
     @staticmethod
-    def cqi_to_mcs(rat_type=LTE, cqi=0):
+    def cqi_to_mcs(rat_type=RatType.LTE, cqi=0) -> int:
         "Standard CQI to MCS mapping."
 
         if cqi < 0 or cqi > 15:
@@ -51,27 +51,27 @@ class DoMapping:
         # LTE: TS 36.213 Table 7.2.3-1 matched to Table 7.1.7.1-1
         # NR: TS 38.214 Table 5.2.2.1-2 matched to Table 5.1.3.1-1
         cqi_to_mcs_dict = {
-            0: {LTE: 0, NR: 0},
-            1: {LTE: 0, NR: 0},
-            2: {LTE: 2, NR: 0},
-            3: {LTE: 4, NR: 2},
-            4: {LTE: 6, NR: 4},
-            5: {LTE: 8, NR: 6},
-            6: {LTE: 9, NR: 8},
-            7: {LTE: 12, NR: 11},
-            8: {LTE: 14, NR: 13},
-            9: {LTE: 16, NR: 15},
-            10: {LTE: 18, NR: 18},
-            11: {LTE: 20, NR: 20},
-            12: {LTE: 22, NR: 22},
-            13: {LTE: 24, NR: 24},
-            14: {LTE: 26, NR: 26},
-            15: {LTE: 28, NR: 28},
+            0: {RatType.LTE: 0, RatType.NR: 0},
+            1: {RatType.LTE: 0, RatType.NR: 0},
+            2: {RatType.LTE: 2, RatType.NR: 0},
+            3: {RatType.LTE: 4, RatType.NR: 2},
+            4: {RatType.LTE: 6, RatType.NR: 4},
+            5: {RatType.LTE: 8, RatType.NR: 6},
+            6: {RatType.LTE: 9, RatType.NR: 8},
+            7: {RatType.LTE: 12, RatType.NR: 11},
+            8: {RatType.LTE: 14, RatType.NR: 13},
+            9: {RatType.LTE: 16, RatType.NR: 15},
+            10: {RatType.LTE: 18, RatType.NR: 18},
+            11: {RatType.LTE: 20, RatType.NR: 20},
+            12: {RatType.LTE: 22, RatType.NR: 22},
+            13: {RatType.LTE: 24, RatType.NR: 24},
+            14: {RatType.LTE: 26, RatType.NR: 26},
+            15: {RatType.LTE: 28, RatType.NR: 28},
         }
         return cqi_to_mcs_dict[cqi][rat_type]
 
     @staticmethod
-    def mcs_to_tbs_index(mcs=0):
+    def mcs_to_tbs_index(mcs=0) -> int:
         "Standard MCS to TBS index mapping."
         # ref: 3GPP TS 36.213, v15.5, Table 7.1.7.1-1
         if mcs < 0 or mcs > 28:
@@ -111,7 +111,7 @@ class DoMapping:
         return mcs_to_tbs_index_dict[mcs]
 
     @staticmethod
-    def nr_mcs_to_qm_coderate(mod_order=64, mcs=0):
+    def nr_mcs_to_qm_coderate(mod_order=64, mcs=0) -> tuple[int, float]:
         "Standard NR MCS to modulation order (Qm) and code rate mapping."
         # NR MCS Table 1 — TS 38.214 Table 5.1.3.1-1 (64-QAM max)
         # Default table used by 5G-LENA
@@ -194,7 +194,7 @@ class DoMapping:
             )
 
     @staticmethod
-    def nr_quantize_small_tbs(n_info_prime):
+    def nr_quantize_small_tbs(n_info_prime) -> int:
         "Quantize small TBS values using TS 38.214 Table 5.1.3.2-1."
         nr_small_tbs_table = [
             24,

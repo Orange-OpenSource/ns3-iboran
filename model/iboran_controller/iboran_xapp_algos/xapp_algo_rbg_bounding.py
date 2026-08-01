@@ -10,32 +10,32 @@
 
 from abc import ABC, abstractmethod
 import numpy as np
-from model.iboran_interfaces.iboran_shm_structure import *
-from model.utils.rbg_demand import RbgDemand
-from model.utils.assign_mcs import assign_mcs
+
+from model.iboran_interfaces.iboran_shm_structure import E2KpmReport
+from model.iboran_interfaces.iboran_shm_protocol import RatType
+from model.utils.rbg_demand_calculator import RbgDemandCalculator
+from model.utils.mcs_assigner import McsAssigner
 
 
 class XAppAlgoRbgBounding(ABC):
-    def __init__(self, intents=None, rat_type=LTE):
+    def __init__(self, intents=None, rat_type=RatType.LTE, algo_id=None):
         self.intents = intents
         self.rat_type = rat_type
+        self.id = algo_id
 
-        self.id = None
-
-        self.contentId = "0"
-
-    def _reset_variables(self):
-        self.candidated_idx = []
-        self.candidated_rnti = []
+    def _reset_variables(self) -> None:
+        self.candidate_idx = []
+        self.candidate_rnti = []
         self.bounded_rbg = []
 
-        self.rbg_demand = RbgDemand(rat_type=self.rat_type)
+        self.rbg_demand_calculator = RbgDemandCalculator(rat_type=self.rat_type)
+        self.mcs_assigner = McsAssigner(rat_type=self.rat_type)
 
-    def execute(self, e2KpmReport: E2KpmReport, **kwargs):
+    def execute(self, e2KpmReport: E2KpmReport, **kwargs) -> tuple[list, list, list]:
         candidates = self._derive_candidates(e2KpmReport)
         if len(candidates) == 0:
-            self.candidated_idx = []
-            self.candidated_rnti = []
+            self.candidate_idx = []
+            self.candidate_rnti = []
             self.bounded_rbg = []
             return [], [], []
 
@@ -43,24 +43,26 @@ class XAppAlgoRbgBounding(ABC):
         if not (done or self._selection_is_verified(e2KpmReport)):
             raise ValueError(f"{self.id} RBG bounding failed.")
 
-        self.candidated_rnti = [e2KpmReport.ue[idx].rnti for idx in self.candidated_idx]
-        return self.candidated_idx, self.candidated_rnti, self.bounded_rbg
+        self.candidate_rnti = [e2KpmReport.ue[idx].rnti for idx in self.candidate_idx]
+        return self.candidate_idx, self.candidate_rnti, self.bounded_rbg
 
     @abstractmethod
     def process(self, candidates, e2KpmReport, **kwargs) -> bool:
         "Execute the RBG bounding."
         ...
 
-    def _derive_candidates(self, e2KpmReport):
+    def _derive_candidates(self, e2KpmReport) -> list[int]:
         "Derive candidate UEs to be scheduled."
         ues = e2KpmReport.ue
         candidates = [i for i in range(e2KpmReport.numUe) if ues[i].bufferLevel > 0]
 
         if self.intents is not None:  # intent-based pre-selection
-            intent = self.intents[e2KpmReport.linkDirection]
+            intents = self.intents[e2KpmReport.linkDirection]
 
-            relevant_cands = [i for i in candidates if ues[i].contentId == intent]
-            irrelevant_cands = [i for i in candidates if ues[i].contentId != intent]
+            relevant_cands = [i for i in candidates if str(ues[i].contentId) in intents]
+            irrelevant_cands = [
+                i for i in candidates if str(ues[i].contentId) not in intents
+            ]
 
             accepted = []
             for idx in relevant_cands + irrelevant_cands:
@@ -83,19 +85,23 @@ class XAppAlgoRbgBounding(ABC):
             return []
         return candidates
 
-    def _selection_is_verified(self, e2KpmReport):
+    def _selection_is_verified(self, e2KpmReport) -> bool:
         "Validate if the available resources can meet selection requirements."
         while sum(self.bounded_rbg) > e2KpmReport.numRbg:
-            if not self.candidated_idx:
+            if not self.candidate_idx:
                 break
-            self.candidated_idx.pop()
-            self.candidated_rnti.pop()
+            self.candidate_idx.pop()
+            self.candidate_rnti.pop()
             self.bounded_rbg.pop()
+
+        if sum(self.bounded_rbg) > e2KpmReport.numRbg:
+            return False
+
         return True
 
-    def _derive_rbg_needed(self, e2KpmReport, input_idx_vect=None):
-        provisional_mcs = assign_mcs(self.rat_type, e2KpmReport, input_idx_vect)
-        rbg_needed = self.rbg_demand.compute(
+    def _derive_rbg_needed(self, e2KpmReport, input_idx_vect=None) -> np.ndarray:
+        provisional_mcs = self.mcs_assigner.assign(e2KpmReport, input_idx_vect)
+        rbg_needed = self.rbg_demand_calculator.compute(
             e2KpmReport, input_idx_vect, provisional_mcs
         )
         return rbg_needed

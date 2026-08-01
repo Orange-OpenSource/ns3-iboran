@@ -107,7 +107,10 @@ main(int argc, char* argv[])
 {
     SimParams& params = SimParams::GetInstance();
     params.SetRatType(RatType::NR);
-    // params.LoadFromCommandLine(argc, argv);
+
+    std::filesystem::path current_dir = std::filesystem::current_path();
+    params.LoadFromYaml((current_dir / "contrib/iboran/notebook/logs/runConfig.yaml").string());
+
     params.Print(std::cout);
 
     auto& commonParams = params.GetCommonRanParams();
@@ -313,7 +316,6 @@ main(int argc, char* argv[])
     PrintApplicationStats(commonParams, params.GetRatType(), ueNodes, txApps, rxApps);
 
     // save flow monitor stats
-    std::filesystem::path current_dir = std::filesystem::current_path();
     std::filesystem::path stats_dir = current_dir / "contrib/iboran/notebook/.flowstats";
     std::filesystem::create_directories(stats_dir);
     std::filesystem::path stats_path = stats_dir / "iboran-flowstats.xml";

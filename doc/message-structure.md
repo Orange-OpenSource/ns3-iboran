@@ -1,6 +1,7 @@
 # Message Structure Reference
 
-This document lists the control messages exchanged through the E2 and E3 interfaces, organized by service model and message type. Each table is split into **Collective** fields (carried once per message) and **Per-UE** fields (repeated for each UE in the payload).
+This document lists the control messages exchanged through the E2 and E3 interfaces, organized by service model and message type. Each table is split into **Collective** fields (carried once per message) and **Per-UE** fields (repeated for each UE in the payload). Messages with no per-UE payload are listed as a single table.
+
 
 ## E2 Service Model
 
@@ -20,7 +21,6 @@ This document lists the control messages exchanged through the E2 and E3 interfa
 | Link Direction | — | DOWNLINK / UPLINK | `uint8` | Packet Delay | ms | — | `uint32` |
 | ID | — | — | `uint32` | | | | |
 
-
 ### E2SM-RC — RIC CONTROL
 
 > Sent from the near-RT RIC to the O-DU to override or configure MAC scheduling behavior.
@@ -33,10 +33,9 @@ This document lists the control messages exchanged through the E2 and E3 interfa
 | Link Direction | — | DOWNLINK / UPLINK | `uint8` | | | | |
 | ID | — | — | `uint32` | | | | |
 
-
 ### E2SM-DAPP — RIC REPORT
 
-> Reported from the dApp (O-DU) to the near-RT RIC, summarizing the executed real-time control step.
+> Reported from the dApp (O-DU) to the near-RT RIC, summarizing the executed real-time control step. This message carries collective (per-TTI) content only — no per-UE breakdown.
 
 | Collective Message Content | Unit | Valid Range | Data Type | Per-UE Message Content | Unit | Valid Range | Data Type |
 |:---|:---:|:---:|:---:|:---|:---:|:---:|:---:|
@@ -50,7 +49,7 @@ This document lists the control messages exchanged through the E2 and E3 interfa
 
 ### E2SM-DAPP — RIC CONTROL
 
-> Sent from the near-RT RIC to the dApp (O-DU) to override or configure the upcoming real-time control step.
+> Sent from the near-RT RIC to the dApp (O-DU) to override or configure the upcoming real-time control step. This message carries collective (per-TTI) content only — no per-UE breakdown.
 
 | Collective Message Content | Unit | Valid Range | Data Type | Per-UE Message Content | Unit | Valid Range | Data Type |
 |:---|:---:|:---:|:---:|:---|:---:|:---:|:---:|

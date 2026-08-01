@@ -5,7 +5,7 @@ This document lists the built-in MAC scheduling algorithms available in ib-ORAN 
 Each algorithm (if applicable) is available in two variants:
 
 - **Standard** — applies the scheduling policy directly on raw KPMs.
-- **Intent-Based (`iB`)** — extends the standard variant with intent-based, semantics-aware decision-making.
+- **Intent-Based (`ib`)** — extends the standard variant with intent-based, semantics-aware decision-making.
 
 ## dApp MAC Scheduling
 
@@ -20,23 +20,23 @@ Algorithms are grouped into four families:
 
 | Algorithm | Standard | Intent-Based | Description |
 |---|---|---|---|
-| **Random** | `"Random"` | `"iBRandom"` | Selects UEs uniformly at random |
-| **Round-Robin** | `"RoundRobin"` | `"iBRoundRobin"` | Selects UEs in circular order |
-| **Top-k: CQI** | `"TopKCqi"` | `"iBTopKCqi"` | Selects the *k* UEs with the highest Channel Quality Indicator |
-| **Top-k: Buffer Size** | `"TopKBufferLevel"` | `"iBTopKBufferLevel"` | Selects the *k* UEs with the largest buffer occupancy |
-| **Top-k: Proportional Fairness** | `"TopKPropFairness"` | `"iBTopKPropFairness"` | Selects the *k* UEs maximizing the proportional fairness metric |
-| **Top-k: Criticality** | `"TopKCriticality"` | `"iBTopKCriticality"` | Selects the *k* UEs with the highest traffic criticality |
-| **Top-k: Multi-Criteria** | `"TopKMultiCriteria"` | `"iBTopKMultiCriteria"` | Selects the *k* UEs ranked by a combination of multiple metrics |
-| **Greedy: CQI** | `"GreedyCqi"` | `"iBGreedyCqi"` | Greedily selects up to *k* UEs by highest CQI |
-| **Greedy: Buffer Size** | `"GreedyBufferLevel"` | `"iBGreedyBufferLevel"` | Greedily selects up to *k* UEs by largest buffer occupancy |
-| **Greedy: Proportional Fairness** | `"GreedyPropFairness"` | `"iBGreedyPropFairness"` | Greedily selects up to *k* UEs by proportional fairness metric |
-| **Greedy: Criticality** | `"GreedyCriticality"` | `"iBGreedyCriticality"` | Greedily selects up to *k* UEs by highest traffic criticality |
-| **Greedy: Multi-Criteria** | `"GreedyMultiCriteria"` | `"iBGreedyMultiCriteria"` | Greedily selects up to *k* UEs by a combination of multiple metrics |
-| **DP: CQI** | `"DpCqi"` | `"iBDpCqi"` | Optimally selects *k* UEs via dynamic programming based on CQI |
-| **DP: Buffer Size** | `"DpBufferLevel"` | `"iBDpBufferLevel"` | Optimally selects *k* UEs via dynamic programming based on buffer occupancy |
-| **DP: Proportional Fairness** | `"DpPropFairness"` | `"iBDpPropFairness"` | Optimally selects *k* UEs via dynamic programming based on proportional fairness |
-| **DP: Criticality** | `"DpCriticality"` | `"iBDpCriticality"` | Optimally selects *k* UEs via dynamic programming based on traffic criticality |
-| **DP: Multi-Criteria** | `"DpMultiCriteria"` | `"iBDpMultiCriteria"` | Optimally selects *k* UEs via dynamic programming based on multiple metrics |
+| **Random** | `"Random"` | `"ibRandom"` | Selects UEs uniformly at random |
+| **Round-Robin** | `"RoundRobin"` | `"ibRoundRobin"` | Selects UEs in circular order |
+| **Top-k: CQI** | `"TopKCqi"` | `"ibTopKCqi"` | Selects the *k* UEs with the highest Channel Quality Indicator |
+| **Top-k: Buffer Size** | `"TopKBufferLevel"` | `"ibTopKBufferLevel"` | Selects the *k* UEs with the largest buffer occupancy |
+| **Top-k: Proportional Fairness** | `"TopKPropFairness"` | `"ibTopKPropFairness"` | Selects the *k* UEs maximizing the proportional fairness metric |
+| **Top-k: Criticality** | `"TopKCriticality"` | `"ibTopKCriticality"` | Selects the *k* UEs with the highest traffic criticality |
+| **Top-k: Multi-Criteria** | `"TopKMultiCriteria"` | `"ibTopKMultiCriteria"` | Selects the *k* UEs ranked by a combination of multiple metrics |
+| **Greedy: CQI** | `"GreedyCqi"` | `"ibGreedyCqi"` | Greedily selects up to *k* UEs by highest CQI |
+| **Greedy: Buffer Size** | `"GreedyBufferLevel"` | `"ibGreedyBufferLevel"` | Greedily selects up to *k* UEs by largest buffer occupancy |
+| **Greedy: Proportional Fairness** | `"GreedyPropFairness"` | `"ibGreedyPropFairness"` | Greedily selects up to *k* UEs by proportional fairness metric |
+| **Greedy: Criticality** | `"GreedyCriticality"` | `"ibGreedyCriticality"` | Greedily selects up to *k* UEs by highest traffic criticality |
+| **Greedy: Multi-Criteria** | `"GreedyMultiCriteria"` | `"ibGreedyMultiCriteria"` | Greedily selects up to *k* UEs by a combination of multiple metrics |
+| **DP: CQI** | `"DpCqi"` | `"ibDpCqi"` | Optimally selects *k* UEs via dynamic programming based on CQI |
+| **DP: Buffer Size** | `"DpBufferLevel"` | `"ibDpBufferLevel"` | Optimally selects *k* UEs via dynamic programming based on buffer occupancy |
+| **DP: Proportional Fairness** | `"DpPropFairness"` | `"ibDpPropFairness"` | Optimally selects *k* UEs via dynamic programming based on proportional fairness |
+| **DP: Criticality** | `"DpCriticality"` | `"ibDpCriticality"` | Optimally selects *k* UEs via dynamic programming based on traffic criticality |
+| **DP: Multi-Criteria** | `"DpMultiCriteria"` | `"ibDpMultiCriteria"` | Optimally selects *k* UEs via dynamic programming based on multiple metrics |
 
 
 ## xApp MAC Scheduling
@@ -46,3 +46,5 @@ The xApp scheduler operates at the near-RT RIC level and guides the dApp over a 
 | Algorithm | ID | Description |
 |---|---|---|
 | **Bypass** | `"Bypass"` | Passes control through to the dApp without modification; used as a baseline or when xApp-level intervention is not required |
+
+> **Note:** Additional xApp scheduling algorithms are currently under development. 

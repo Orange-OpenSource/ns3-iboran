@@ -8,139 +8,103 @@
 #
 # Authors: see CONTRIBUTORS.md
 
-from abc import ABC, abstractmethod
-from model.iboran_interfaces.iboran_shm_structure import *
-from model.iboran_interfaces.iboran_e2sm_dapp_structure import *
-from model.utils.cpp2py_msg_validation import e2_kpm_report_validation
-import time
+from abc import abstractmethod
+
+import numpy as np
+
+from model.iboran_interfaces.iboran_shm_structure import (
+    Cpp2Py,
+    Py2Cpp,
+    E2KpmReport,
+    E2RcControl,
+)
+from model.iboran_interfaces.iboran_e2sm_dapp_structure import (
+    E2DAppControl,
+    E2DAppReport,
+)
+from model.iboran_interfaces.iboran_shm_protocol import (
+    LinkDirection,
+    RatType,
+    MessageType,
+)
+from model.iboran_controller.iboran_controller import IbOranController
 
 
-class IbOranXApp(ABC):
-    def __init__(self, intents, rat_type, control_period_f):
-        self.intents = intents
-        self.rat_type = rat_type
-        self.control_period_f = control_period_f
+class IbOranXApp(IbOranController):
+    _KIND = "xApp"
 
-        self.id = None
+    def __init__(
+        self,
+        intents: dict[LinkDirection, np.ndarray] | None,
+        rat_type: RatType,
+        control_period_f: int,
+        app_id: str | None = None,
+    ):
+        super().__init__(
+            intents=intents,
+            rat_type=rat_type,
+            control_period=control_period_f,
+            app_id=app_id,
+        )
 
-    def _reset_variables(self):
-        self.e2_dapp_ = E2DappInterface()
-        self._e2_rc_control = {DOWNLINK: E2RcControl(), UPLINK: E2RcControl()}
-        for ctrl in self._e2_rc_control.values():
-            ctrl.skipThisStep = True
-            ctrl.maxUeSchedSize = 0
-
-        self._e2_dapp_report = {DOWNLINK: E2DAppReport(), UPLINK: E2DAppReport()}
-        self._e2_dapp_control = {DOWNLINK: E2DAppControl(), UPLINK: E2DAppControl()}
-
-        self.step = 0
-        self.last_control_f = {DOWNLINK: 0, UPLINK: 0}
-        self.dl_decisions = 0
-        self.ul_decisions = 0
-        self.decision_time_ms = 0
-        self.errors = []
-
-    def run(self, cpp2Py: Cpp2Py, py2Cpp: Py2Cpp, e2_dapp_report: E2DAppReport):
-        e2KpmReport = cpp2Py.e2KpmReport
-        link = e2KpmReport.linkDirection
-        self.step += 1
-
-        if self._should_skip_step(py2Cpp, e2KpmReport, e2_dapp_report):
-            return self.e2_dapp_.control
-
-        decision_start = time.perf_counter()
-        done = self.process(e2KpmReport=e2KpmReport, py2Cpp=py2Cpp)
-        if not done:
-            self._apply_skip_step(py2Cpp, e2KpmReport)
-            return self.e2_dapp_.control
-        self.decision_time_ms += time.perf_counter() - decision_start
-
-        if link == DOWNLINK:
-            self.dl_decisions += 1
-        else:
-            self.ul_decisions += 1
-
-        self.write_e2_rc_control(py2Cpp, e2KpmReport)
-        self.write_e2_dapp_control(link)
-        return self.e2_dapp_.control
+    def run(
+        self, cpp2Py: Cpp2Py, py2Cpp: Py2Cpp, e2_dapp_report: E2DAppReport
+    ) -> E2DAppControl:
+        return self._run(cpp2Py=cpp2Py, py2Cpp=py2Cpp, peer_message=e2_dapp_report)
 
     @abstractmethod
-    def process(self, e2KpmReport, py2Cpp) -> bool:
-        "Execute the xApp control algorithm."
-        ...
-
-    @abstractmethod
-    def write_e2_rc_control(self, py2Cpp, e2KpmReport) -> None:
+    def write_e2_rc_control(self, py2Cpp: Py2Cpp, e2KpmReport: E2KpmReport) -> None:
         "Write E2SM-RC CONTROL message elements."
         ...
 
     @abstractmethod
-    def write_e2_dapp_control(self, link) -> None:
+    def write_e2_dapp_control(self, link_dir: LinkDirection) -> None:
         "Write E2SM-DAPP CONTROL message elements."
         ...
 
     @abstractmethod
-    def store_e2_dapp_report(self, e2_dapp_report, link) -> None:
+    def store_e2_dapp_report(
+        self, link_dir: LinkDirection, e2_dapp_report: E2DAppReport
+    ) -> None:
         "Store E2SM-DAPP REPORT message elements."
         ...
 
-    def _should_skip_step(self, py2Cpp, e2KpmReport, e2_dapp_report):
-        link = e2KpmReport.linkDirection
-        frames_since_last = e2KpmReport.frameNo - self.last_control_f[link]
-        if frames_since_last > 0 and frames_since_last % self.control_period_f == 0:
-            self.last_control_f[link] = e2KpmReport.frameNo
-        else:
-            self.write_e2_rc_control(py2Cpp, e2KpmReport)
-            self.write_e2_dapp_control(link)
-            return True
+    def _extract_report(self, cpp2Py: Cpp2Py) -> E2KpmReport:
+        return cpp2Py.e2KpmReport
 
-        # verify E2SM-DAPP REPORT
-        if e2_dapp_report.type != E2SM_DAPP_REPORT:
-            print("ib-ORAN MAC Scheduler xApp: E2SM-DAPP REPORT verification failed.")
-        else:
-            self.store_e2_dapp_report(e2_dapp_report, link=link)
+    def _output_message(self) -> E2DAppControl:
+        return self.e2_dapp_.control
 
-        # verify E2SM-KPM REPORT
-        e2_kpm_report_errors = e2_kpm_report_validation(e2KpmReport, self.rat_type)
-        if e2_kpm_report_errors:
-            self._apply_skip_step(py2Cpp, e2KpmReport)
-            self.errors.append(e2_kpm_report_errors)
-            return True
+    def write_primary_control(self, py2Cpp: Py2Cpp, report: E2KpmReport) -> None:
+        self.write_e2_rc_control(py2Cpp, report)
 
-        return False
+    def write_dapp_interface_message(self, link_dir: LinkDirection) -> None:
+        self.write_e2_dapp_control(link_dir)
 
-    def _apply_skip_step(self, py2Cpp, e2KpmReport):
-        link = e2KpmReport.linkDirection
-        self._e2_rc_control[link].skipThisStep = True
-        self._e2_dapp_control[link].skipThisStep = True
-        self._e2_rc_control[link].maxUeSchedSize = 0
-        self._e2_dapp_control[link].maxUeSchedSize = 0
-        self.write_e2_rc_control(py2Cpp, e2KpmReport)
-        self.write_e2_dapp_control(link)
+    def store_dapp_interface_message(
+        self, link_dir: LinkDirection, peer_message: E2DAppReport
+    ) -> None:
+        self.store_e2_dapp_report(link_dir, peer_message)
 
-    def print_stats(self):
-        header = f"-- xApp {self.id}: Stats "
-        print(f"\n{header:-<39}")
-        print(f"{'Total control steps':<22}: {self.step}")
-        total_decisions = self.dl_decisions + self.ul_decisions
-        print(f"{'Total decisions':<22}: {total_decisions}")
-        if total_decisions > 0:
-            print(
-                f"{'Downlink decisions':<22}: {self.dl_decisions}"
-                f" ({100 * self.dl_decisions / (total_decisions):.2f} %)"
-            )
-            print(
-                f"{'Uplink decisions':<22}: {self.ul_decisions}"
-                f" ({100 * self.ul_decisions / (total_decisions):.2f} %)"
-            )
-        if self.step > 0:
-            print(
-                f"{'Avg decision time':<22}: "
-                f"{1000*self.decision_time_ms / self.step:.2f} ms"
+    def _verify_peer_message(self, peer_message: E2DAppReport) -> None:
+        if peer_message.type != MessageType.E2SM_DAPP_REPORT:
+            raise ValueError(
+                f"ib-ORAN {self._KIND}: E2SM-DAPP REPORT verification failed."
             )
 
-        print(f"{'Errors encountered':<22}: {len(self.errors)}")
-        if self.errors:
-            print("\n error(s)")
-            for i in range(len(self.errors)):
-                print(f" -> {self.errors[i]}")
+    def _time_unit(self, report: E2KpmReport) -> int:
+        return report.frameNo
+
+    def _reset_primary_control_to_skip(self, link_dir: LinkDirection) -> None:
+        self._e2_rc_control[link_dir].skipThisStep = True
+        self._e2_dapp_control[link_dir].skipThisStep = True
+        self._e2_rc_control[link_dir].maxUeSchedSize = 0
+        self._e2_dapp_control[link_dir].maxUeSchedSize = 0
+
+    def _reset_variables(self) -> None:
+        self._reset_common_variables()
+
+        self._e2_rc_control = self._per_link(E2RcControl)
+        for ctrl in self._e2_rc_control.values():
+            ctrl.skipThisStep = True
+            ctrl.maxUeSchedSize = 0

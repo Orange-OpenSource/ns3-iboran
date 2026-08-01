@@ -9,68 +9,149 @@
 # Authors: see CONTRIBUTORS.md
 
 import sys
-import os
 import argparse
+
+from model.iboran_interfaces.iboran_shm_protocol import RatType
 from model.iboran_campaign.iboran_orchestrator import IbOranOrchestrator
-from model.utils.do_log import DoLog
+from model.utils.file_store import FileStore
+from model.utils.config_store import (
+    ConfigStore,
+    load_config,
+    DEFAULT_CONFIG_PATH,
+    RUN_CONFIG_PATH,
+)
 
 
 def main():
-    args = config_args()
+    args = _config_args()
+    overrides = _collect_cli_overrides(args)
+    master = load_config(DEFAULT_CONFIG_PATH)
+
+    cfg = (
+        ConfigStore(**_deep_merge(master.model_dump(), overrides))
+        if overrides
+        else master
+    )
+    cfg.dump_run_config(RUN_CONFIG_PATH)
 
     orchestrator = IbOranOrchestrator(
-        rat_type=args.rat_type,
-        dapp_control_period_sf=args.dapp_control_period_sf,
-        xapp_control_period_f=args.xapp_control_period_f,
-        dapp_algo_ue_selection=args.dapp_algo_ue_selection,
-        xapp_algo_rbg_bounding=args.xapp_algo_rbg_bounding,
-        show_flowstats=args.show_flowstats,
-        show_iqa_diagnosis=args.show_iqa_diagnosis,
-        save_dapp_log=args.save_dapp_log,
+        rat_type=getattr(RatType, cfg.rat_type),
+        dapp_control_period_sf=cfg.orchestrator.dapp_control_period_sf,
+        xapp_control_period_f=cfg.orchestrator.xapp_control_period_f,
+        dapp_algo_ue_selection=cfg.orchestrator.dapp_algo_ue_selection,
+        xapp_algo_rbg_bounding=cfg.orchestrator.xapp_algo_rbg_bounding,
+        dataset_id=cfg.orchestrator.dataset_id,
+        data_format=cfg.orchestrator.data_format,
+        embedder=cfg.orchestrator.embedder,
+        oid_range=cfg.orchestrator.oid_range,
+        save_dapp_log=cfg.orchestrator.save_dapp_log,
+        verbose=cfg.orchestrator.verbose,
+        common_params=cfg.common,
+        datasets={name: entry.model_dump() for name, entry in cfg.datasets.items()},
     )
-    result = (
-        orchestrator.execute(k=args.k) if args.k is not None else orchestrator.execute()
-    )
+    result = orchestrator.execute(k=cfg.orchestrator.k)
 
     if result == 0:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        logger = DoLog(script_dir, "../../notebook/logs", "kpi.json")
-        logger.json_dump(orchestrator.kpi)
+        store = FileStore(orchestrator.notebook_dir, "logs", "kpi.json")
+        store.json_dump(orchestrator.kpi)
         orchestrator.cleanup()
 
     sys.exit(result)
 
 
-def config_args():
+def _deep_merge(base: dict, overrides: dict) -> dict:
+    result = dict(base)
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def _collect_cli_overrides(args) -> dict:
+    _TOP_LEVEL_FIELDS = {"rat_type"}
+
+    all_fields = [
+        "rat_type",
+        "k",
+        "dapp_control_period_sf",
+        "xapp_control_period_f",
+        "dapp_algo_ue_selection",
+        "xapp_algo_rbg_bounding",
+        "dataset_id",
+        "data_format",
+        "embedder",
+        "oid_range",
+        "save_dapp_log",
+        "verbose",
+    ]
+
+    overrides: dict = {}
+    orchestrator_overrides: dict = {}
+    for field in all_fields:
+        value = getattr(args, field)
+        if value is None:
+            continue
+        if field in _TOP_LEVEL_FIELDS:
+            overrides[field] = value
+        else:
+            orchestrator_overrides[field] = value
+
+    if orchestrator_overrides:
+        overrides["orchestrator"] = orchestrator_overrides
+    return overrides
+
+
+def _config_args():
     parser = argparse.ArgumentParser(description="ib-ORAN")
-    parser.add_argument("--rat_type", default="LTE", help="RAT type")
+    parser.add_argument("--rat_type", default=None, help="RAT")
     parser.add_argument(
         "--dapp_control_period_sf",
         type=int,
-        default=1,
-        help="dApp control period (scale: subframe)",
+        default=None,
+        help="dApp control period (in subframe)",
     )
     parser.add_argument(
         "--xapp_control_period_f",
         type=int,
-        default=1,
-        help="xApp control period (scale: frame)",
-    )
-    parser.add_argument("--k", type=int, default=1, help="UE selection size")
-    parser.add_argument(
-        "--dapp_algo_ue_selection", default="Random", help="dApp UE selection algorithm"
+        default=None,
+        help="xApp control period (in frame)",
     )
     parser.add_argument(
-        "--xapp_algo_rbg_bounding", default="Bypass", help="xApp RBG bounding algorithm"
+        "--k",
+        type=int,
+        default=None,
+        help="Maximum parallel UEs scheduled per TTI/slot",
     )
     parser.add_argument(
-        "--show_flowstats", type=lambda x: x.lower() == "true", default=True
+        "--dapp_algo_ue_selection",
+        default=None,
+        help="dApp MAC scheduling algorithm",
     )
     parser.add_argument(
-        "--show_iqa_diagnosis", type=lambda x: x.lower() == "true", default=True
+        "--xapp_algo_rbg_bounding", default=None, help="xApp RBG bounding algorithm"
+    )
+    parser.add_argument("--dataset_id", default=None, help="Identifier of the dataset")
+    parser.add_argument("--data_format", default=None, help="Application data format")
+    parser.add_argument("--embedder", default=None, help="Emedding extraction model")
+    parser.add_argument(
+        "--oid_range",
+        type=lambda s: tuple(int(x) for x in s.split(",")),
+        default=None,
+        help="Range of object IDs for intent generation (format: low,high)",
     )
     parser.add_argument(
-        "--save_dapp_log", type=lambda x: x.lower() == "true", default=False
+        "--save_dapp_log",
+        type=lambda x: x.lower() == "true",
+        default=None,
+        help="Save dApp control log to file",
+    )
+    parser.add_argument(
+        "--verbose",
+        type=lambda x: x.lower() == "true",
+        default=None,
+        help="Print statistics and KPIs' summary to console",
     )
     return parser.parse_args()
 

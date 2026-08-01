@@ -21,3 +21,8 @@ This catalog lists the Open RAN Apps currently available in ib-ORAN, organized b
 | Name | xApp ID | Description | Additional Parameters |
 |---|---|---|---|
 | xApp MAC Scheduler | `"MacScheduler"` | Performs MAC-layer UE scheduling at the near-RT RIC, overriding or guiding the dApp scheduler over a longer control horizon based on the configured algorithm. | `k`, `algo_ue_selection` |
+
+
+## rApps (Non-RT RIC)
+
+> **Note:** rApps are not yet implemented. This section will be populated as non-RT RIC support is added.

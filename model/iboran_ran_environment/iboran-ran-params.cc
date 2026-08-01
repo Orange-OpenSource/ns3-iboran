@@ -13,8 +13,43 @@
 #include "iboran-ran-params.h"
 
 #include "ns3/command-line.h"
+#include "ns3/log.h"
 
+#include <fstream>
 #include <iomanip>
+#include <sstream>
+#include <yaml-cpp/yaml.h>
+
+NS_LOG_COMPONENT_DEFINE("SimParams");
+
+namespace
+{
+
+ns3::DataFormat
+StringToDataFormat(const std::string& str)
+{
+    if (str == "IMAGE")
+    {
+        return ns3::DataFormat::IMAGE;
+    }
+    if (str == "VIDEO")
+    {
+        return ns3::DataFormat::VIDEO;
+    }
+    if (str == "EMBEDDING")
+    {
+        return ns3::DataFormat::EMBEDDING;
+    }
+    if (str == "TEXT")
+    {
+        return ns3::DataFormat::TEXT;
+    }
+
+    NS_LOG_ERROR("Unknown data format string '" << str << "'. Defaulting to EMBEDDING.");
+    return ns3::DataFormat::EMBEDDING;
+}
+
+} // namespace
 
 namespace ns3
 {
@@ -25,7 +60,7 @@ SimParams::SimParams()
     // -- Common Parameters ----------------------------------------------
     common.simTime = 20.0;
     common.simAreaLength = 500.0;
-    common.ueNum = 10;
+    common.ueNum = 6;
     common.xnbNum = 1;
     common.remoteHostNum = 1;
 
@@ -45,27 +80,30 @@ SimParams::SimParams()
 
     common.enableDlFlow = true;
     common.dlTxRepeat = 1; // TODO: Revise application layer to support multiple receptions
-    common.dlPacketSize = 1400;
+    common.dlPacketSize = 512;
     common.dlBitRate = 200e3;
     common.dlMinInterval = 0.0;
     common.dlUseUdp = true;
 
     common.enableUlFlow = true;
     common.ulTxRepeat = 1;
-    common.ulPacketSize = 1400;
+    common.ulPacketSize = 512;
     common.ulBitRate = 100e3;
     common.ulMinInterval = 0.0;
     common.ulUseUdp = true;
 
+    // Safety-net default: previously left uninitialized (undefined
+    // behavior on read) unless LoadDataFormatFromFile happened to run
+    // first. LoadFromYaml overrides this from the config file's
+    // `orchestrator.data_format` key when present.
     common.dataFormat = DataFormat::IMAGE;
-    /* IMAGE, VIDEO, EMBEDDING, TEXT, CUSTOM */
 
     common.enableIbOranSchedCoreLog = false;
     common.enableRrcLog = false;
 
     // -- LTE Parameters -------------------------------------------------
-    lte.dlEarfcn = 2750;  // downlink EARFCN 2750: 2620–2690 MHz, band 7
-    lte.ulEarfcn = 20750; // uplink EARFCN 20750: 2500–2570 MHz, band 7
+    lte.dlEarfcn = 2750;  // downlink EARFCN 2750: 2620–2690 MHz, band 7
+    lte.ulEarfcn = 20750; // uplink EARFCN 20750: 2500–2570 MHz, band 7
     /* Calculate 4G LTE EARFCN: https://5g-tools.com/4g-lte-earfcn-calculator/ */
     lte.dlRbNum = 100; // 100 RBs: 20 MHz bandwidth
     lte.ulRbNum = 100; // 100 RBs: 20 MHz bandwidth
@@ -130,12 +168,6 @@ SimParams::GetInstance()
     return instance;
 }
 
-// void
-// SimParams::SetRatType(RatType rat)
-// {
-//     ratType = rat;
-// }
-
 void
 SimParams::SetRatType(std::string_view type)
 {
@@ -143,16 +175,224 @@ SimParams::SetRatType(std::string_view type)
 }
 
 void
-SimParams::LoadFromCommandLine(int argc, char* argv[])
+SimParams::LoadFromYaml(const std::string& filepath)
 {
-    CommandLine cmd;
-    cmd.AddValue("simTime", "Simulation time", common.simTime);
-    cmd.AddValue("ueNum", "Number of UEs", common.ueNum);
-    cmd.AddValue("xnbTxPower", "(eNodeB/gNB Transmission power", common.xnbTxPower);
-    // ... add all parameters
-    cmd.Parse(argc, argv);
+    YAML::Node root;
+    try
+    {
+        root = YAML::LoadFile(filepath);
+    }
+    catch (const YAML::BadFile&)
+    {
+        NS_LOG_ERROR("SimParams: could not open '" << filepath << "'. Using built-in defaults.");
+        return;
+    }
+    catch (const YAML::ParserException& e)
+    {
+        NS_LOG_ERROR("SimParams: failed to parse '" << filepath << "': " << e.what());
+        return;
+    }
 
-    // recalculate dependent values
+    if (root["rat_type"])
+    {
+        ratType = root["rat_type"].as<std::string>();
+    }
+
+    // -- Common Parameters ------------------------------------------------
+    if (auto c = root["common"])
+    {
+        if (c["simTime"])
+        {
+            common.simTime = c["simTime"].as<double>();
+        }
+        if (c["simAreaLength"])
+        {
+            common.simAreaLength = c["simAreaLength"].as<double>();
+        }
+        if (c["ueNum"])
+        {
+            common.ueNum = c["ueNum"].as<uint32_t>();
+        }
+        if (c["xnbNum"])
+        {
+            common.xnbNum = c["xnbNum"].as<uint32_t>();
+        }
+        if (c["remoteHostNum"])
+        {
+            common.remoteHostNum = c["remoteHostNum"].as<uint32_t>();
+        }
+
+        if (c["handoverHysteresis"])
+        {
+            common.handoverHysteresis = c["handoverHysteresis"].as<double>();
+        }
+        if (c["handoverTimeToTrigger"])
+        {
+            common.handoverTimeToTrigger = c["handoverTimeToTrigger"].as<double>();
+        }
+
+        if (c["ueMinTxPower"])
+        {
+            common.ueMinTxPower = c["ueMinTxPower"].as<double>();
+        }
+        if (c["ueMaxTxPower"])
+        {
+            common.ueMaxTxPower = c["ueMaxTxPower"].as<double>();
+        }
+        if (c["xnbTxPower"])
+        {
+            common.xnbTxPower = c["xnbTxPower"].as<double>();
+        }
+        if (c["compensationFactor"])
+        {
+            common.compensationFactor = c["compensationFactor"].as<double>();
+        }
+
+        if (c["backhaulDataRate"])
+        {
+            common.backhaulDataRate = DataRate(c["backhaulDataRate"].as<std::string>());
+        }
+        if (c["backhaulMtu"])
+        {
+            common.backhaulMtu = c["backhaulMtu"].as<uint32_t>();
+        }
+        if (c["backhaulDelay"])
+        {
+            common.backhaulDelay = c["backhaulDelay"].as<double>();
+        }
+
+        if (c["enableDlFlow"])
+        {
+            common.enableDlFlow = c["enableDlFlow"].as<bool>();
+        }
+        if (c["dlTxRepeat"])
+        {
+            common.dlTxRepeat = c["dlTxRepeat"].as<uint32_t>();
+        }
+        if (c["dlPacketSize"])
+        {
+            common.dlPacketSize = c["dlPacketSize"].as<uint32_t>();
+        }
+        if (c["dlBitRate"])
+        {
+            common.dlBitRate = c["dlBitRate"].as<uint32_t>();
+        }
+        if (c["dlUseUdp"])
+        {
+            common.dlUseUdp = c["dlUseUdp"].as<bool>();
+        }
+
+        if (c["enableUlFlow"])
+        {
+            common.enableUlFlow = c["enableUlFlow"].as<bool>();
+        }
+        if (c["ulTxRepeat"])
+        {
+            common.ulTxRepeat = c["ulTxRepeat"].as<uint32_t>();
+        }
+        if (c["ulPacketSize"])
+        {
+            common.ulPacketSize = c["ulPacketSize"].as<uint32_t>();
+        }
+        if (c["ulBitRate"])
+        {
+            common.ulBitRate = c["ulBitRate"].as<uint32_t>();
+        }
+        if (c["ulUseUdp"])
+        {
+            common.ulUseUdp = c["ulUseUdp"].as<bool>();
+        }
+
+        if (c["enableIbOranSchedCoreLog"])
+        {
+            common.enableIbOranSchedCoreLog = c["enableIbOranSchedCoreLog"].as<bool>();
+        }
+        if (c["enableRrcLog"])
+        {
+            common.enableRrcLog = c["enableRrcLog"].as<bool>();
+        }
+    }
+
+    if (auto py = root["orchestrator"]; py["data_format"])
+    {
+        common.dataFormat = StringToDataFormat(py["data_format"].as<std::string>());
+    }
+
+    // -- LTE Parameters -----------------------------------------------------
+    if (auto l = root["lte"])
+    {
+        if (l["dlEarfcn"])
+        {
+            lte.dlEarfcn = l["dlEarfcn"].as<uint32_t>();
+        }
+        if (l["ulEarfcn"])
+        {
+            lte.ulEarfcn = l["ulEarfcn"].as<uint32_t>();
+        }
+        if (l["dlRbNum"])
+        {
+            lte.dlRbNum = l["dlRbNum"].as<uint32_t>();
+        }
+        if (l["ulRbNum"])
+        {
+            lte.ulRbNum = l["ulRbNum"].as<uint32_t>();
+        }
+        if (l["transmissionMode"])
+        {
+            lte.transmissionMode = l["transmissionMode"].as<uint32_t>();
+        }
+        if (l["p0NominalPusch"])
+        {
+            lte.p0NominalPusch = l["p0NominalPusch"].as<double>();
+        }
+    }
+
+    // -- NR Parameters --------------------------------------------------------
+    if (auto n = root["nr"])
+    {
+        if (n["centralFrequency"])
+        {
+            nr.centralFrequency = n["centralFrequency"].as<double>();
+        }
+        if (n["bandwidth"])
+        {
+            nr.bandwidth = n["bandwidth"].as<double>();
+        }
+        if (n["numCc"])
+        {
+            nr.numCc = n["numCc"].as<uint32_t>();
+        }
+        if (n["numBwp"])
+        {
+            nr.numBwp = n["numBwp"].as<uint32_t>();
+        }
+        if (n["numerology"])
+        {
+            nr.numerology = n["numerology"].as<uint32_t>();
+        }
+        if (n["tddPattern"])
+        {
+            nr.tddPattern = n["tddPattern"].as<std::string>();
+        }
+        if (n["gNbAntennaNumRows"])
+        {
+            nr.gNbAntennaNumRows = n["gNbAntennaNumRows"].as<uint32_t>();
+        }
+        if (n["gNbAntennaNumColumns"])
+        {
+            nr.gNbAntennaNumColumns = n["gNbAntennaNumColumns"].as<uint32_t>();
+        }
+        if (n["ueAntennaNumRows"])
+        {
+            nr.ueAntennaNumRows = n["ueAntennaNumRows"].as<uint32_t>();
+        }
+        if (n["ueAntennaNumColumns"])
+        {
+            nr.ueAntennaNumColumns = n["ueAntennaNumColumns"].as<uint32_t>();
+        }
+    }
+
+    // recalculate dependent values now that packet size / bit rate are loaded
     common.dlMinInterval = common.dlPacketSize * 8.0 / common.dlBitRate;
     common.ulMinInterval = common.ulPacketSize * 8.0 / common.ulBitRate;
 }
@@ -201,7 +441,7 @@ operator<<(std::ostream& os, const SimParams& params)
            : commonParams.dataFormat == DataFormat::VIDEO     ? "VIDEO"
            : commonParams.dataFormat == DataFormat::EMBEDDING ? "EMBEDDING"
            : commonParams.dataFormat == DataFormat::TEXT      ? "TEXT"
-                                                              : "CUSTOM")
+                                                              : "UNKNOWN")
        << "\n"
        << std::setw(30) << "Downlink Transmission Repeat" << ": " << std::setw(1)
        << commonParams.dlTxRepeat << "\n"
@@ -220,7 +460,7 @@ operator<<(std::ostream& os, const SimParams& params)
            : commonParams.dataFormat == DataFormat::VIDEO     ? "VIDEO"
            : commonParams.dataFormat == DataFormat::EMBEDDING ? "EMBEDDING"
            : commonParams.dataFormat == DataFormat::TEXT      ? "TEXT"
-                                                              : "CUSTOM")
+                                                              : "UNKNOWN")
        << "\n"
        << std::setw(30) << "Uplink Transmission Repeat" << ": " << std::setw(1)
        << commonParams.ulTxRepeat << "\n"
