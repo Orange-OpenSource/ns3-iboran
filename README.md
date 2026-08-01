@@ -56,7 +56,7 @@ The architecture spans three control planes — non-RT RIC, near-RT RIC, and rea
 
 Concretely, A1 carries policy guidance from the non-RT RIC's rApps to the near-RT RIC's xApps; E2 connects the near-RT RIC to the O-DU (ns-3 RAN), carrying KPM reports, RIC control, and dApp-related messages; and E3 connects the dApp to the MAC/RLC layers, enabling sub-10ms local control at the O-DU. 
 
-### Message Exchange Structures
+### Message Structures
 
 See the [`message-structure.md`](/doc/message-structure.md) for the complete lists of control messages by service model exchanged over the implemented interfaces.
 

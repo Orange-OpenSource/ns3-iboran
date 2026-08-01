@@ -7,7 +7,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## 2.1.0 (2025-08-01)
+## 2.1.0 (2026-08-01)
 
 ### Added
 - A standalone KPI definition module, `iboran_kpi`, providing shared foundations for KPI measurement across data formats.
@@ -25,13 +25,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `DataFormat::CUSTOM` is no longer a supported data format.
 
 
-## 2.0.0 (2025-07-01)
+## 2.0.0 (2026-07-01)
 
 ### Added
 - 3GPP NR RAT support based on the 5G-LENA NR module.
 
 
-## 1.0.0 (2025-06-01)
+## 1.0.0 (2026-06-01)
 
 ### Added
 - Initial public release of ib-ORAN.
