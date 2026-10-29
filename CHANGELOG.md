@@ -7,6 +7,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## 2.2.0 (2026-10-29)
+
+### Added
+- `Clamp` xApp RBG bounding algorithm (standard and `ib` variants), bounding each UE's RBG grant to its current demand.
+- Reproducible replications via `--rng_run` (`common.rngRun`), seeding ns-3 and every other random generator; runs with the same value share the same channel and traffic realization.
+- Per-UE content in E2SM-DAPP REPORT and CONTROL messages, enabling per-UE RBG bounds and grant feedback between xApp and dApp.
+- `XAppDecisionTime` KPI, KPI definitions in `doc/simulation-data.md`, and campaign caching of per-run KPI records.
+
+### Changed
+- xApp RBG bounds persist until replaced, and the dApp serves a UE up to its bound instead of dropping it.
+- Throughput and packet delay in KPM/E3 reports are now measured by the MAC schedulers instead of estimated.
+- Standard KPIs (PDR, throughput, latency, jitter) are aggregated per link; `PRBUtilizationRatio`, `DAppDecisionTime` and `SatisfactionScore` computations corrected.
+- New defaults in `iboranConfig.yaml`: NR, Market-1501 dataset, EMBEDDING data format.
+- Algorithm and app interfaces now receive the E2SM-DAPP messages; custom algorithms must update their `process()` signatures.
+- New dependency: `yacs`.
+
+### Removed
+- `Numerology` attribute of `IbOranNrMacScheduler`; the slot duration is taken from the PHY configuration.
+
+### Fixed
+- Off-by-one PRB demand in the LTE TBS lookup.
+- Non-reproducible UE object-ID assignment in the ns-3 environment.
+- Campaign runs recording KPIs of a previous run after a failure.
+
+
 ## 2.1.0 (2026-08-01)
 
 ### Added
