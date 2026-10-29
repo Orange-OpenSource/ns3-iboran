@@ -13,12 +13,14 @@ from .xapp_algo_rbg_bounding import XAppAlgoRbgBounding
 
 
 class XAppAlgoRbgBoundingBypass(XAppAlgoRbgBounding):
+    _ID_PREFIX = "Bypass"
+
     def __init__(self, intents, rat_type):
-        super().__init__(intents, rat_type, algo_id="Bypass")
+        super().__init__(intents, rat_type, algo_id=self._ID_PREFIX)
 
         self._reset_variables()
 
-    def process(self, candidates, e2KpmReport, **kwargs) -> bool:
+    def process(self, candidates, e2KpmReport, e2DAppReport, **kwargs) -> bool:
         "Execute the RBG bounding."
         self.candidate_idx = candidates
         self.bounded_rbg = e2KpmReport.numRbg * np.ones(

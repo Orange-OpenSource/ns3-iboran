@@ -98,7 +98,7 @@ class IbOranDApp(IbOranController):
             )
 
     def _time_unit(self, report: E3Indication) -> int:
-        return report.frameNo * ProtocolLimits.SUBFRAMES_PER_FRAME + report.subframeNo
+        return report.timestamp // 1_000_000
 
     def _extra_skip_check(self, link_dir: LinkDirection) -> bool:
         return self._e2_dapp_control[link_dir].skipThisStep

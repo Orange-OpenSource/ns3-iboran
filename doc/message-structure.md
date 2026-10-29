@@ -28,37 +28,37 @@ This document lists the control messages exchanged through the E2 and E3 interfa
 | Collective Message Content | Unit | Valid Range | Data Type | Per-UE Message Content | Unit | Valid Range | Data Type |
 |:---|:---:|:---:|:---:|:---|:---:|:---:|:---:|
 | Type | — | As defined | `uint16` | RNTI | — | — | `uint16` |
-| Max UE Selection Size | — | — | `uint32` | Max RBG Allocation | — | 0–Max RBG | `uint16` |
+| Max UE Selection Size | — | 0–Max UE | `uint32` | Max RBG Allocation | — | 0–Max PRB | `uint16` |
 | Skip This Step | — | No / Yes | `bool` | | | | |
 | Link Direction | — | DOWNLINK / UPLINK | `uint8` | | | | |
 | ID | — | — | `uint32` | | | | |
 
 ### E2SM-DAPP — RIC REPORT
 
-> Reported from the dApp (O-DU) to the near-RT RIC, summarizing the executed real-time control step. This message carries collective (per-TTI) content only — no per-UE breakdown.
+> Reported from the dApp (O-DU) to the near-RT RIC, summarizing the real-time control steps executed since the last xApp decision.
 
 | Collective Message Content | Unit | Valid Range | Data Type | Per-UE Message Content | Unit | Valid Range | Data Type |
 |:---|:---:|:---:|:---:|:---|:---:|:---:|:---:|
-| Type | — | As defined | `int` | | | | |
-| Number of Selected UEs | — | — | | | | | |
-| Total Number of Allocated RBGs | — | 0–Max RBG | | | | | |
-| RBG Size | PRB | 1–4 | | | | | |
-| Link Direction | — | DOWNLINK / UPLINK | | | | | |
-| ID | — | — | | | | | |
-
+| Type | — | As defined | `int` | RNTI | — | — | `int` |
+| Number of Selected UEs | — | 0–Max UE | `int` | Number of Allocated RBGs (last TTI) | — | 0–Max RBG | `int` |
+| Total Number of Allocated RBGs | — | 0–Max RBG | `int` | Sum of Allocated RBGs (since last xApp decision) | — | — | `int` |
+| RBG Size | PRB | 1–4 | `int` | Number of Scheduled TTIs (since last xApp decision) | — | — | `int` |
+| Link Direction | — | DOWNLINK / UPLINK | `int` | | | | |
+| ID | — | — | `int` | | | | |
 
 ### E2SM-DAPP — RIC CONTROL
 
-> Sent from the near-RT RIC to the dApp (O-DU) to override or configure the upcoming real-time control step. This message carries collective (per-TTI) content only — no per-UE breakdown.
+> Sent from the near-RT RIC to the dApp (O-DU) to override or configure the upcoming real-time control steps.
 
 | Collective Message Content | Unit | Valid Range | Data Type | Per-UE Message Content | Unit | Valid Range | Data Type |
 |:---|:---:|:---:|:---:|:---|:---:|:---:|:---:|
-| Type | — | As defined | `int` | | | | |
-| Max UE Selection Size | — | — | | | | | |
-| Total Available RBGs | — | 0–Max RBG | | | | | |
+| Type | — | As defined | `int` | RNTI | — | — | `int` |
+| Max UE Selection Size | — | 0–Max UE | `int` | Max RBG Allocation | — | 0–Max PRB | `int` |
+| Total Available RBGs | — | — | `int` | | | | |
 | Skip This Step | — | No / Yes | `bool` | | | | |
 | Link Direction | — | DOWNLINK / UPLINK | `int` | | | | |
-| ID | — | — | | | | | |
+| ID | — | — | `int` | | | | |
+| Decision ID | — | — | `int` | | | | |
 
 
 ## E3 Service Model

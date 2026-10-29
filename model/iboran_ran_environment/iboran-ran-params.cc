@@ -101,6 +101,8 @@ SimParams::SimParams()
     common.enableIbOranSchedCoreLog = false;
     common.enableRrcLog = false;
 
+    common.rngRun = 1;
+
     // -- LTE Parameters -------------------------------------------------
     lte.dlEarfcn = 2750;  // downlink EARFCN 2750: 2620–2690 MHz, band 7
     lte.ulEarfcn = 20750; // uplink EARFCN 20750: 2500–2570 MHz, band 7
@@ -311,6 +313,10 @@ SimParams::LoadFromYaml(const std::string& filepath)
         {
             common.enableRrcLog = c["enableRrcLog"].as<bool>();
         }
+        if (c["rngRun"])
+        {
+            common.rngRun = c["rngRun"].as<uint32_t>();
+        }
     }
 
     if (auto py = root["orchestrator"]; py["data_format"])
@@ -475,7 +481,8 @@ operator<<(std::ostream& os, const SimParams& params)
        << std::setw(30) << "ib-ORAN MAC Scheduler Logging" << ": " << std::setw(1)
        << (commonParams.enableIbOranSchedCoreLog ? "Enabled" : "Disabled") << "\n"
        << std::setw(30) << "RRC Logging" << ": " << std::setw(1)
-       << (commonParams.enableRrcLog ? "Enabled" : "Disabled") << "\n";
+       << (commonParams.enableRrcLog ? "Enabled" : "Disabled") << "\n"
+       << std::setw(30) << "RNG Run" << ": " << std::setw(1) << commonParams.rngRun << "\n";
 
     if (params.GetRatType() == RatType::LTE)
     {

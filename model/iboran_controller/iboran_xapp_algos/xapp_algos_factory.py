@@ -14,19 +14,26 @@ from model.iboran_controller.iboran_xapp_algos.xapp_algo_rbg_bounding import (
 from model.iboran_controller.iboran_xapp_algos.xapp_algo_rbg_bounding_bypass import (
     XAppAlgoRbgBoundingBypass,
 )
+from model.iboran_controller.iboran_xapp_algos.xapp_algo_rbg_bounding_clamp import (
+    XAppAlgoRbgBoundingClamp,
+)
 
 # Standalone algos with no metric variation
 _STANDALONE = {
     "Bypass": XAppAlgoRbgBoundingBypass,
+    "Clamp": XAppAlgoRbgBoundingClamp,
 }
 
 # Parametric families: prefix → class
 _FAMILIES = {}
 
 _VALID_METRICS = {}
+_RL_ALGOS = {"PPO"}
 
 BASE_XAPP_ALGOS_KEYS = set(_STANDALONE) | {
-    f"{family}{metric}" for family in _FAMILIES for metric in _VALID_METRICS
+    f"{family}{metric}"
+    for family in _FAMILIES
+    for metric in _VALID_METRICS
 }
 
 
@@ -38,13 +45,14 @@ def setup_xapp_algo_rbg_bounding(
 
     for prefix, cls in _FAMILIES.items():
         if algo_name.startswith(prefix):
-            metric = algo_name[len(prefix) :]
-            if metric not in _VALID_METRICS:
+            key = algo_name[len(prefix) :]
+
+            if key not in _VALID_METRICS:
                 raise ValueError(
-                    f"Unknown metric '{metric}' for family '{prefix}'. "
+                    f"Unknown metric '{key}' for family '{prefix}'. "
                     f"Valid metrics: {sorted(_VALID_METRICS)}"
                 )
-            return cls(intents, rat_type, metric=metric)
+            return cls(intents, rat_type, metric=key)
 
     raise ValueError(
         f"Invalid xApp RBG bounding algo: '{algo_name}'. "

@@ -7,9 +7,10 @@ Each algorithm (if applicable) is available in two variants:
 - **Standard** — applies the scheduling policy directly on raw KPMs.
 - **Intent-Based (`ib`)** — extends the standard variant with intent-based, semantics-aware decision-making.
 
+
 ## dApp MAC Scheduling
 
-Algorithms are grouped into four families:
+Algorithms are grouped into five families:
 
 | Family | Strategy |
 |---|---|
@@ -20,7 +21,7 @@ Algorithms are grouped into four families:
 
 | Algorithm | Standard | Intent-Based | Description |
 |---|---|---|---|
-| **Random** | `"Random"` | `"ibRandom"` | Selects UEs uniformly at random |
+| **Random** | `"Random"` | `"ibRandom"` | Selects UEs uniformly at random (seeded by `--rng_run`) |
 | **Round-Robin** | `"RoundRobin"` | `"ibRoundRobin"` | Selects UEs in circular order |
 | **Top-k: CQI** | `"TopKCqi"` | `"ibTopKCqi"` | Selects the *k* UEs with the highest Channel Quality Indicator |
 | **Top-k: Buffer Size** | `"TopKBufferLevel"` | `"ibTopKBufferLevel"` | Selects the *k* UEs with the largest buffer occupancy |
@@ -41,10 +42,9 @@ Algorithms are grouped into four families:
 
 ## xApp MAC Scheduling
 
-The xApp scheduler operates at the near-RT RIC level and guides the dApp over a longer control horizon.
+The xApp scheduler operates at the near-RT RIC level and guides the dApp over a longer control horizon. 
 
-| Algorithm | ID | Description |
-|---|---|---|
-| **Bypass** | `"Bypass"` | Passes control through to the dApp without modification; used as a baseline or when xApp-level intervention is not required |
-
-> **Note:** Additional xApp scheduling algorithms are currently under development. 
+| Algorithm | Standard | Intent-Based | Description |
+|---|---|---|---|
+| **Bypass** | `"Bypass"` | `"ibBypass"` | Assigns every candidate UE the full available RBG count with no bound; used as a baseline or when xApp-level RBG bounding is not required |
+| **Clamp** | `"Clamp"` | `"ibClamp"` | Bounds each candidate UE's RBG grant to its current demand |

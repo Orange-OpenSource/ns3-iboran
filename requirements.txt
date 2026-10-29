@@ -18,7 +18,7 @@ pyyaml>=6.0
 huggingface_hub
 transformers
 scikit-image>=0.26.0
-tqdm 
+tqdm
 ipywidgets
 torchvision
 tol_colors>=2.2.0
@@ -26,8 +26,10 @@ pydantic
 ruamel.yaml
 gdown
 
+# Embedding backends (TransReID)
+yacs>=0.1.8
+
 # Optional: for development
 pytest>=6.0.0
-black>=21.0
-black[jupyter]
+black[jupyter]>=21.0
 flake8>=3.9.0

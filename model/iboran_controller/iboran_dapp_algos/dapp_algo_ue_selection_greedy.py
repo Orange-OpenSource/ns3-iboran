@@ -20,7 +20,7 @@ class DAppAlgoUeSelectionGreedy(DAppAlgoUeSelection):
         self._reset_variables()
         self._bind_metric_fn()
 
-    def process(self, candidates, e3Indication, **kwargs) -> bool:
+    def process(self, candidates, e3Indication, e2DAppControl, **kwargs) -> bool:
         "Execute the UE selection."
         metric_of_candidates = self._get_metric_of_candidates(
             e3Indication, candidates, **kwargs

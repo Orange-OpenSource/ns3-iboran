@@ -103,8 +103,6 @@ IbOranLteMacScheduler::DoDispose()
     m_ulHarqProcessesDciBuffer.clear();
     m_ueDlTotalBytesServed.clear();
     m_ueUlTotalBytesServed.clear();
-    m_ueDlAllocatedRb.clear();
-    m_ueUlAllocatedRb.clear();
     m_ueDlMaxRbgAllocation.clear();
     m_ueUlMaxRbgAllocation.clear();
     delete m_cschedSapProvider;
@@ -279,10 +277,12 @@ IbOranLteMacScheduler::DoCschedUeReleaseReq(
     m_dlHarqProcessesTimer.erase(params.m_rnti);
     m_dlHarqProcessesDciBuffer.erase(params.m_rnti);
     m_dlHarqProcessesRlcPduListBuffer.erase(params.m_rnti);
+    m_dlTput.Erase(params.m_rnti);
     m_ulHarqCurrentProcessId.erase(params.m_rnti);
     m_ulHarqProcessesStatus.erase(params.m_rnti);
     m_ulHarqProcessesDciBuffer.erase(params.m_rnti);
     m_ceBsrRxed.erase(params.m_rnti);
+    m_ulTput.Erase(params.m_rnti);
     auto it = m_rlcBufferReq.begin();
     while (it != m_rlcBufferReq.end())
     {
@@ -578,6 +578,20 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
                          << (0xF & params.m_sfnSf));
 
     RefreshDlCqiMaps();
+
+    const uint64_t nowNs = Simulator::Now().GetNanoSeconds();
+    {
+        std::set<uint16_t> dlBacklogged;
+        for (const auto& [flow, req] : m_rlcBufferReq)
+        {
+            if (req.m_rlcTransmissionQueueSize > 0 || req.m_rlcRetransmissionQueueSize > 0 ||
+                req.m_rlcStatusPduSize > 0)
+            {
+                dlBacklogged.insert(flow.m_rnti);
+            }
+        }
+        m_dlWaiting.Retain(dlBacklogged);
+    }
 
     int rbgSize = GetRbgSize(m_cschedCellConfig.m_dlBandwidth);
     int rbgNum = m_cschedCellConfig.m_dlBandwidth / rbgSize;
@@ -1022,6 +1036,9 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
     E3Indication* e3Indication = &(cpp2Py->e3Indication);
     E2KpmReport* e2KpmReport = &(cpp2Py->e2KpmReport);
 
+    InitE3Indication(e3Indication);
+    InitE2KpmReport(e2KpmReport);
+
     int rbgStart = 0;
     for (size_t i = 0; i < rbgMap.size(); i++)
     {
@@ -1088,31 +1105,15 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
         std::map<uint16_t, uint8_t>::iterator itCqi = m_p10CqiRxed.find(rnti);
         uint8_t rntiCqi = (itCqi != m_p10CqiRxed.end()) ? (*itCqi).second : 1;
 
-        double rntiAchievableRate = 0.0;
-        double rntiActualThroughput = 0.0;
-        if (m_ueDlAllocatedRb[rnti] > 0)
-        {
-            rntiAchievableRate = (m_amc->GetSpectralEfficiencyFromCqi(rntiCqi) * 180e3 *
-                                  (double)m_ueDlAllocatedRb[rnti]) /
-                                 1e6;
-
-            uint8_t rntiMcs = (itCqi != m_p10CqiRxed.end()) ? m_amc->GetMcsFromCqi(rntiCqi) : 0;
-            rntiActualThroughput = std::min(
-                rntiAchievableRate,
-                (m_amc->GetDlTbSizeFromMcs(rntiMcs, m_ueDlAllocatedRb[rnti] * rbgSize) / 1e-3) /
-                    1e6);
-        }
+        // Full-band rate at current CQI (TBS bits per 1 ms TTI -> Mbps)
+        const uint8_t rntiMcsFull = m_amc->GetMcsFromCqi(rntiCqi);
+        const double rntiAchievableRate =
+            m_amc->GetDlTbSizeFromMcs(rntiMcsFull, rbgNum * rbgSize) / 1e3;
+        const double rntiActualThroughput = m_dlTput.GetMbps(rnti, nowNs);
 
         uint8_t rntiQci = GetQciForRnti(rnti);
 
-        uint32_t rntiPacketDelay = 0;
-        if (rntiTotalBuffer > 0)
-        {
-            rntiPacketDelay = (rntiAchievableRate > 0)
-                                  ? static_cast<uint32_t>((rntiTotalBuffer * 8.0) /
-                                                          (rntiAchievableRate * 1e6) * 1000.0)
-                                  : 0;
-        }
+        const uint32_t rntiPacketDelay = m_dlWaiting.GetWaitingMs(rnti, nowNs);
 
         uint32_t rntiTotalBytesServed = 0;
         auto itByteServed = m_ueDlTotalBytesServed.find(rnti);
@@ -1135,6 +1136,7 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
         e2KpmReport->ue[ueIdx].rnti = rnti;
         e2KpmReport->ue[ueIdx].cqi = rntiCqi;
         e2KpmReport->ue[ueIdx].bufferLevel = rntiTotalBuffer;
+        std::snprintf(e2KpmReport->ue[ueIdx].contentId, MAX_ID_LEN, "%s", rntiContentId.c_str());
         e2KpmReport->ue[ueIdx].qci = rntiQci;
         e2KpmReport->ue[ueIdx].achievableRate = rntiAchievableRate;
         e2KpmReport->ue[ueIdx].actualThroughput = rntiActualThroughput;
@@ -1192,273 +1194,284 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
     E3Control* e3Control = &(py2Cpp->e3Control);
     E2RcControl* e2RcControl = &(py2Cpp->e2RcControl);
 
+    bool validCtrl = true;
     if (e3Control->type != E3SM_CONTROL)
     {
-        std::cerr << "ib-ORAN LTE MAC Scheduler: dApp responded with an invalid message type: "
-                     "Skipping.\n";
-        m_shmInterface->CppRecvEnd();
-        return;
+        std::cerr << "ib-ORAN LTE MAC Scheduler: dApp responded with an invalid message type.\n";
+        validCtrl = false;
     }
-    if (e2RcControl->type != E2SM_RC_CONTROL)
+    else if (e2RcControl->type != E2SM_RC_CONTROL)
     {
-        std::cerr << "ib-ORAN LTE MAC Scheduler: xApp responded with an invalid message type: "
-                     "Skipping.\n";
-        m_shmInterface->CppRecvEnd();
-        return;
+        std::cerr << "ib-ORAN LTE MAC Scheduler: xApp responded with an invalid message type.\n";
+        validCtrl = false;
     }
-    if (e3Control->linkDirection != DOWNLINK)
+    else if (e3Control->linkDirection != DOWNLINK || e2RcControl->linkDirection != DOWNLINK)
     {
         std::cerr
-            << "ib-ORAN LTE MAC Scheduler: dApp responded to different link direction: Skipping.\n";
-        m_shmInterface->CppRecvEnd();
-        return;
-    }
-    if (e2RcControl->linkDirection != DOWNLINK)
-    {
-        std::cerr
-            << "ib-ORAN LTE MAC Scheduler: xApp responded to different link direction: Skipping.\n";
-        m_shmInterface->CppRecvEnd();
-        return;
+            << "ib-ORAN LTE MAC Scheduler: controller responded to a different link direction.\n";
+        validCtrl = false;
     }
 
-    uint32_t maxUeSchedSize = e2RcControl->maxUeSchedSize;
-    uint32_t ueSchedSize = std::min(e3Control->ueSchedSize, maxUeSchedSize);
-    if (!e3Control->skipThisStep && !e2RcControl->skipThisStep && ueSchedSize > 0)
+    if (validCtrl)
     {
-        for (uint32_t i = 0; i < e2RcControl->maxUeSchedSize; i++)
+        uint32_t maxUeSchedSize = e2RcControl->maxUeSchedSize;
+        uint32_t ueSchedSize = std::min(e3Control->ueSchedSize, maxUeSchedSize);
+        if (!e3Control->skipThisStep && !e2RcControl->skipThisStep && ueSchedSize > 0)
         {
-            uint16_t rntiFromXApp = e2RcControl->ue[i].rnti;
-            m_ueDlMaxRbgAllocation[rntiFromXApp] = e2RcControl->ue[i].maxRbgAllocation;
-        }
-
-        std::map<uint16_t, unsigned int> lcActivesPerRnti;
-        for (auto it = m_rlcBufferReq.begin(); it != m_rlcBufferReq.end(); it++)
-        {
-            uint16_t rnti = (*it).first.m_rnti;
-            if ((*it).second.m_rlcTransmissionQueueSize > 0 ||
-                (*it).second.m_rlcRetransmissionQueueSize > 0 ||
-                (*it).second.m_rlcStatusPduSize > 0)
+            for (uint32_t i = 0; i < e2RcControl->maxUeSchedSize; i++)
             {
-                lcActivesPerRnti[rnti]++;
-            }
-        }
-
-        uint32_t totalRbAllocated = 0;
-        for (uint32_t i = 0; i < ueSchedSize; i++)
-        {
-            uint16_t rnti = e3Control->ue[i].rnti;
-            uint16_t rbgStart = e3Control->ue[i].initAllocatedRbg;
-            uint16_t rbgLen = e3Control->ue[i].numAllocatedRbg;
-            uint8_t mcs = e3Control->ue[i].mcs;
-
-            uint16_t maxRbgAllocation = 0;
-            auto it = m_ueDlMaxRbgAllocation.find(rnti);
-            if (it != m_ueDlMaxRbgAllocation.end())
-            {
-                maxRbgAllocation = it->second;
-                rbgLen = std::min(rbgLen, maxRbgAllocation);
-            }
-            else
-            {
-                std::cerr << "ib-ORAN LTE MAC Scheduler: xApp and dApp sent inconsistent RNTIs: "
-                             "Skipping.\n";
-                continue;
+                uint16_t rntiFromXApp = e2RcControl->ue[i].rnti;
+                m_ueDlMaxRbgAllocation[rntiFromXApp] = e2RcControl->ue[i].maxRbgAllocation;
             }
 
-            std::map<uint16_t, uint8_t>::iterator itTxMode = m_uesTxMode.find(rnti);
-            if (itTxMode == m_uesTxMode.end())
+            std::map<uint16_t, unsigned int> lcActivesPerRnti;
+            for (auto it = m_rlcBufferReq.begin(); it != m_rlcBufferReq.end(); it++)
             {
-                std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent invalid RNTI " << rnti
-                          << ": Skipping.\n";
-                continue;
-            }
-            if (mcs > 28)
-            {
-                std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent invalid MCS " << (int)mcs
-                          << " for RNTI " << rnti << ": Skipping.\n";
-                continue;
-            }
-            if (rbgStart + rbgLen > rbgNum || rbgLen > maxRbgAllocation)
-            {
-                std::cerr
-                    << "ib-ORAN LTE MAC Scheduler: dApp sent out-of-bound RB allocation for RNTI "
-                    << rnti << ": Skipping.\n";
-                continue;
-            }
-            if (totalRbAllocated + rbgLen > (uint32_t)(rbgNum - rbgAllocatedNum))
-            {
-                NS_LOG_WARN("Controller over-allocated RBs: Stopping allocations");
-                break;
-            }
-
-            // build RBG bitmap — check for conflicts before marking anything
-            uint32_t rbgMask = 0;
-            bool conflictFound = false;
-            for (int i = rbgStart; i < rbgStart + rbgLen && i < rbgNum; i++)
-            {
-                if (!rbgMap.at(i))
+                uint16_t rnti = (*it).first.m_rnti;
+                if ((*it).second.m_rlcTransmissionQueueSize > 0 ||
+                    (*it).second.m_rlcRetransmissionQueueSize > 0 ||
+                    (*it).second.m_rlcStatusPduSize > 0)
                 {
-                    rbgMask = rbgMask + (0x1 << i);
+                    lcActivesPerRnti[rnti]++;
+                }
+            }
+
+            uint32_t totalRbAllocated = 0;
+            for (uint32_t i = 0; i < ueSchedSize; i++)
+            {
+                uint16_t rnti = e3Control->ue[i].rnti;
+                uint16_t rbgStart = e3Control->ue[i].initAllocatedRbg;
+                uint16_t rbgLen = e3Control->ue[i].numAllocatedRbg;
+                uint8_t mcs = e3Control->ue[i].mcs;
+
+                uint16_t maxRbgAllocation = 0;
+                auto it = m_ueDlMaxRbgAllocation.find(rnti);
+                if (it != m_ueDlMaxRbgAllocation.end())
+                {
+                    maxRbgAllocation = it->second;
+                    rbgLen = std::min(rbgLen, maxRbgAllocation);
                 }
                 else
                 {
-                    conflictFound = true;
-                    break;
+                    maxRbgAllocation = rbgLen;
                 }
-            }
-            if (conflictFound)
-            {
-                NS_LOG_ERROR("RB conflict for RNTI " << rnti << ": skipping UE");
-                continue;
-            }
 
-            for (int i = rbgStart; i < rbgStart + rbgLen && i < rbgNum; i++)
-            {
-                rbgMap.at(i) = true;
-                rbgAllocatedNum++;
-            }
-            totalRbAllocated += rbgLen;
+                std::map<uint16_t, uint8_t>::iterator itTxMode = m_uesTxMode.find(rnti);
+                if (itTxMode == m_uesTxMode.end())
+                {
+                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent invalid RNTI " << rnti
+                              << ": Skipping.\n";
+                    continue;
+                }
 
-            if (!HarqProcessAvailability(rnti))
-            {
-                NS_LOG_WARN("No free HARQ process for RNTI " << rnti << ": skipping");
-                continue;
-            }
+                if (mcs > 28)
+                {
+                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent invalid MCS " << (int)mcs
+                              << " for RNTI " << rnti << ": Skipping.\n";
+                    continue;
+                }
 
-            BuildDataListElement_s newEl;
-            newEl.m_rnti = rnti;
-            DlDciListElement_s dlDci;
-            dlDci.m_rnti = rnti;
-            dlDci.m_harqProcess = UpdateHarqProcessId(rnti);
-            dlDci.m_resAlloc = 0;
-            dlDci.m_rbBitmap = rbgMask;
-
-            int nLayers = TransmissionModesLayers::TxMode2LayerNum((*itTxMode).second);
-            if (nLayers <= 0 || nLayers > 2)
-            {
-                NS_LOG_ERROR("Invalid nLayers " << nLayers << " for RNTI " << rnti);
-                continue;
-            }
-
-            auto itLcRnti = lcActivesPerRnti.find(rnti);
-            if (itLcRnti == lcActivesPerRnti.end())
-            {
-                NS_LOG_WARN("No LC info for RNTI " << rnti);
-                continue;
-            }
-            int lcNum = itLcRnti->second;
-
-            int tbSize = (m_amc->GetDlTbSizeFromMcs(mcs, rbgLen * rbgSize) / 8);
-            if (tbSize < lcNum * MINIMUM_PDU_SIZE)
-            {
-                NS_LOG_WARN("Allocated TBS (" << tbSize << ") too small for " << lcNum
-                                              << " LCs. Reducing LC count.");
-                lcNum = std::max(1, (int)(tbSize / MINIMUM_PDU_SIZE));
-            }
-            uint16_t rlcPduSize = tbSize / lcNum;
-
-            m_ueDlTotalBytesServed[rnti] += tbSize;
-            m_ueDlAllocatedRb[rnti] = rbgLen;
-
-            for (int layer = 0; layer < nLayers; layer++)
-            {
-                dlDci.m_mcs.push_back(mcs);
-                dlDci.m_ndi.push_back(1);
-                dlDci.m_rv.push_back(0);
-                dlDci.m_tbsSize.push_back(tbSize);
-            }
-
-            std::map<LteFlowId_t, FfMacSchedSapProvider::SchedDlRlcBufferReqParameters>::iterator
-                itRlc;
-            for (itRlc = m_rlcBufferReq.begin(); itRlc != m_rlcBufferReq.end(); itRlc++)
-            {
-                if ((*itRlc).first.m_rnti != rnti)
+                if (rbgLen == 0)
                 {
                     continue;
                 }
 
-                uint32_t lcBufferSize = (*itRlc).second.m_rlcTransmissionQueueSize +
-                                        (*itRlc).second.m_rlcRetransmissionQueueSize +
-                                        (*itRlc).second.m_rlcStatusPduSize;
-
-                if (lcBufferSize == 0)
+                if (rbgStart + rbgLen > rbgNum || rbgLen > maxRbgAllocation)
                 {
+                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent out-of-bound RB allocation "
+                                 "for RNTI "
+                              << rnti << ": Skipping.\n";
                     continue;
                 }
 
-                if (lcNum <= 0)
+                if (totalRbAllocated + rbgLen > (uint32_t)(rbgNum - rbgAllocatedNum))
                 {
-                    NS_LOG_WARN("lcNum exhausted for RNTI " << rnti << ": stopping LC scheduling");
+                    NS_LOG_WARN("Controller over-allocated RBs: Stopping allocations");
                     break;
                 }
 
-                std::vector<struct RlcPduListElement_s> newRlcPduLe;
-                for (uint8_t layer = 0; layer < nLayers; layer++)
+                // Checks that consume nothing
+                int nLayers = TransmissionModesLayers::TxMode2LayerNum((*itTxMode).second);
+                if (nLayers <= 0 || nLayers > 2)
                 {
-                    RlcPduListElement_s newRlcEl;
-                    newRlcEl.m_logicalChannelIdentity = (*itRlc).first.m_lcId;
-                    newRlcEl.m_size = rlcPduSize;
+                    NS_LOG_ERROR("Invalid nLayers " << nLayers << " for RNTI " << rnti);
+                    continue;
+                }
 
-                    NS_LOG_INFO(this << " RNTI " << rnti << " LCID "
-                                     << (uint32_t)newRlcEl.m_logicalChannelIdentity << " size "
-                                     << rlcPduSize << " layer " << (uint16_t)layer);
+                auto itLcRnti = lcActivesPerRnti.find(rnti);
+                if (itLcRnti == lcActivesPerRnti.end())
+                {
+                    NS_LOG_WARN("No LC info for RNTI " << rnti);
+                    continue;
+                }
 
-                    UpdateDlRlcBufferInfo((*itRlc).first.m_rnti,
-                                          newRlcEl.m_logicalChannelIdentity,
-                                          rlcPduSize);
+                if (!HarqProcessAvailability(rnti))
+                {
+                    NS_LOG_WARN("No free HARQ process for RNTI " << rnti << ": skipping");
+                    continue;
+                }
 
-                    newRlcPduLe.push_back(newRlcEl);
-
-                    if (m_harqOn)
+                uint32_t rbgMask = 0;
+                bool conflictFound = false;
+                for (int k = rbgStart; k < rbgStart + rbgLen && k < rbgNum; k++)
+                {
+                    if (rbgMap.at(k))
                     {
-                        std::map<uint16_t, DlHarqRlcPduListBuffer_t>::iterator itRlcPdu =
-                            m_dlHarqProcessesRlcPduListBuffer.find(rnti);
-                        if (itRlcPdu != m_dlHarqProcessesRlcPduListBuffer.end())
-                        {
-                            (*itRlcPdu)
-                                .second.at(layer)
-                                .at(dlDci.m_harqProcess)
-                                .push_back(newRlcEl);
-                        }
-                        else
-                        {
-                            NS_FATAL_ERROR("No RNTI entry in DL RLC PDU HARQ buffer for RNTI "
-                                           << rnti);
-                        }
+                        conflictFound = true;
+                        break;
+                    }
+                    rbgMask |= (0x1u << k);
+                }
+
+                if (conflictFound)
+                {
+                    NS_LOG_ERROR("RB conflict for RNTI " << rnti << ": skipping UE");
+                    continue;
+                }
+
+                // Commit resources
+                for (int k = rbgStart; k < rbgStart + rbgLen && k < rbgNum; k++)
+                {
+                    rbgMap.at(k) = true;
+                    rbgAllocatedNum++;
+                }
+                totalRbAllocated += rbgLen;
+
+                BuildDataListElement_s newEl;
+                newEl.m_rnti = rnti;
+                DlDciListElement_s dlDci;
+                dlDci.m_rnti = rnti;
+                dlDci.m_harqProcess = UpdateHarqProcessId(rnti);
+                dlDci.m_resAlloc = 0;
+                dlDci.m_rbBitmap = rbgMask;
+
+                int lcNum = itLcRnti->second;
+
+                int tbSize = (m_amc->GetDlTbSizeFromMcs(mcs, rbgLen * rbgSize) / 8);
+                if (tbSize < lcNum * MINIMUM_PDU_SIZE)
+                {
+                    NS_LOG_WARN("Allocated TBS (" << tbSize << ") too small for " << lcNum
+                                                  << " LCs. Reducing LC count.");
+                    lcNum = std::max(1, (int)(tbSize / MINIMUM_PDU_SIZE));
+                }
+                uint16_t rlcPduSize = tbSize / lcNum;
+
+                m_ueDlTotalBytesServed[rnti] += tbSize;
+
+                for (int layer = 0; layer < nLayers; layer++)
+                {
+                    dlDci.m_mcs.push_back(mcs);
+                    dlDci.m_ndi.push_back(1);
+                    dlDci.m_rv.push_back(0);
+                    dlDci.m_tbsSize.push_back(tbSize);
+                }
+
+                uint32_t rntiBufBefore = 0;
+                for (const auto& [flow, req] : m_rlcBufferReq)
+                {
+                    if (flow.m_rnti == rnti)
+                    {
+                        rntiBufBefore += req.m_rlcTransmissionQueueSize +
+                                         req.m_rlcRetransmissionQueueSize + req.m_rlcStatusPduSize;
                     }
                 }
-                newEl.m_rlcPduList.push_back(newRlcPduLe);
-                lcNum--;
-            }
+                m_dlTput.AddServed(
+                    rnti,
+                    nowNs,
+                    std::min<uint32_t>(static_cast<uint32_t>(tbSize) * nLayers, rntiBufBefore));
 
-            dlDci.m_tpc = 1;
-            newEl.m_dci = dlDci;
-
-            if (m_harqOn)
-            {
-                std::map<uint16_t, DlHarqProcessesDciBuffer_t>::iterator itDci =
-                    m_dlHarqProcessesDciBuffer.find(rnti);
-                if (itDci == m_dlHarqProcessesDciBuffer.end())
+                std::map<LteFlowId_t,
+                         FfMacSchedSapProvider::SchedDlRlcBufferReqParameters>::iterator itRlc;
+                for (itRlc = m_rlcBufferReq.begin(); itRlc != m_rlcBufferReq.end(); itRlc++)
                 {
-                    NS_FATAL_ERROR("No RNTI entry in DL DCI HARQ buffer for RNTI " << rnti);
-                }
-                (*itDci).second.at(dlDci.m_harqProcess) = dlDci;
+                    if ((*itRlc).first.m_rnti != rnti)
+                    {
+                        continue;
+                    }
 
-                std::map<uint16_t, DlHarqProcessesTimer_t>::iterator itHarqTimer =
-                    m_dlHarqProcessesTimer.find(rnti);
-                if (itHarqTimer == m_dlHarqProcessesTimer.end())
+                    uint32_t lcBufferSize = (*itRlc).second.m_rlcTransmissionQueueSize +
+                                            (*itRlc).second.m_rlcRetransmissionQueueSize +
+                                            (*itRlc).second.m_rlcStatusPduSize;
+
+                    if (lcBufferSize == 0)
+                    {
+                        continue;
+                    }
+
+                    if (lcNum <= 0)
+                    {
+                        NS_LOG_WARN("lcNum exhausted for RNTI " << rnti
+                                                                << ": stopping LC scheduling");
+                        break;
+                    }
+
+                    std::vector<struct RlcPduListElement_s> newRlcPduLe;
+                    for (uint8_t layer = 0; layer < nLayers; layer++)
+                    {
+                        RlcPduListElement_s newRlcEl;
+                        newRlcEl.m_logicalChannelIdentity = (*itRlc).first.m_lcId;
+                        newRlcEl.m_size = rlcPduSize;
+
+                        NS_LOG_INFO(this << " RNTI " << rnti << " LCID "
+                                         << (uint32_t)newRlcEl.m_logicalChannelIdentity << " size "
+                                         << rlcPduSize << " layer " << (uint16_t)layer);
+
+                        UpdateDlRlcBufferInfo((*itRlc).first.m_rnti,
+                                              newRlcEl.m_logicalChannelIdentity,
+                                              rlcPduSize);
+
+                        newRlcPduLe.push_back(newRlcEl);
+
+                        if (m_harqOn)
+                        {
+                            std::map<uint16_t, DlHarqRlcPduListBuffer_t>::iterator itRlcPdu =
+                                m_dlHarqProcessesRlcPduListBuffer.find(rnti);
+                            if (itRlcPdu != m_dlHarqProcessesRlcPduListBuffer.end())
+                            {
+                                (*itRlcPdu)
+                                    .second.at(layer)
+                                    .at(dlDci.m_harqProcess)
+                                    .push_back(newRlcEl);
+                            }
+                            else
+                            {
+                                NS_FATAL_ERROR("No RNTI entry in DL RLC PDU HARQ buffer for RNTI "
+                                               << rnti);
+                            }
+                        }
+                    }
+                    newEl.m_rlcPduList.push_back(newRlcPduLe);
+                    lcNum--;
+                }
+
+                dlDci.m_tpc = 1;
+                newEl.m_dci = dlDci;
+
+                if (m_harqOn)
                 {
-                    NS_FATAL_ERROR("No RNTI entry in DL HARQ timer buffer for RNTI " << rnti);
-                }
-                (*itHarqTimer).second.at(dlDci.m_harqProcess) = 0;
-            }
+                    std::map<uint16_t, DlHarqProcessesDciBuffer_t>::iterator itDci =
+                        m_dlHarqProcessesDciBuffer.find(rnti);
+                    if (itDci == m_dlHarqProcessesDciBuffer.end())
+                    {
+                        NS_FATAL_ERROR("No RNTI entry in DL DCI HARQ buffer for RNTI " << rnti);
+                    }
+                    (*itDci).second.at(dlDci.m_harqProcess) = dlDci;
 
-            ret.m_buildDataList.push_back(newEl);
+                    std::map<uint16_t, DlHarqProcessesTimer_t>::iterator itHarqTimer =
+                        m_dlHarqProcessesTimer.find(rnti);
+                    if (itHarqTimer == m_dlHarqProcessesTimer.end())
+                    {
+                        NS_FATAL_ERROR("No RNTI entry in DL HARQ timer buffer for RNTI " << rnti);
+                    }
+                    (*itHarqTimer).second.at(dlDci.m_harqProcess) = 0;
+                }
+                m_dlWaiting.MarkServed(rnti, nowNs);
+                ret.m_buildDataList.push_back(newEl);
+            }
         }
     }
 
     m_shmInterface->CppRecvEnd();
-
     ret.m_nrOfPdcchOfdmSymbols = 1;
     m_schedSapUser->SchedDlConfigInd(ret);
 }
@@ -1557,6 +1570,19 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
 
     RefreshUlCqiMaps();
     m_ffrSapProvider->ReportUlCqiInfo(m_ueCqi);
+
+    const uint64_t nowNs = Simulator::Now().GetNanoSeconds();
+    {
+        std::set<uint16_t> ulBacklogged;
+        for (const auto& [rnti, buffer] : m_ceBsrRxed)
+        {
+            if (buffer > 0)
+            {
+                ulBacklogged.insert(rnti);
+            }
+        }
+        m_ulWaiting.Retain(ulBacklogged);
+    }
 
     FfMacSchedSapUser::SchedUlConfigIndParameters ret;
     std::vector<bool> rbMap;
@@ -1688,6 +1714,9 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
     E3Indication* e3Indication = &(cpp2Py->e3Indication);
     E2KpmReport* e2KpmReport = &(cpp2Py->e2KpmReport);
 
+    InitE3Indication(e3Indication);
+    InitE2KpmReport(e2KpmReport);
+
     int rbgStart = 0;
     for (size_t i = 0; i < rbMap.size(); i++)
     {
@@ -1720,42 +1749,33 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
 
         std::map<uint16_t, std::vector<double>>::iterator itCqi = m_ueCqi.find(rnti);
 
-        double avgSinr = 0.0;
         uint8_t rntiCqi = 1;
-        if (itCqi != m_ueCqi.end() && !(*itCqi).second.empty())
+        if (itCqi != m_ueCqi.end())
         {
-            for (auto sinr : (*itCqi).second)
+            double sum = 0.0;
+            unsigned n = 0;
+            for (double sinr : itCqi->second)
             {
-                avgSinr += sinr;
+                if (sinr != NO_SINR)
+                {
+                    sum += sinr;
+                    ++n;
+                }
             }
-            avgSinr /= (*itCqi).second.size();
-            rntiCqi = GetCqiFromSinr(avgSinr);
+            if (n > 0)
+            {
+                rntiCqi = GetCqiFromSinr(sum / n);
+            }
         }
 
-        double rntiAchievableRate = 0.0;
-        double rntiActualThroughput = 0.0;
-        if (m_ueUlAllocatedRb[rnti] > 0)
-        {
-            rntiAchievableRate = (m_amc->GetSpectralEfficiencyFromCqi(rntiCqi) * 180e3 *
-                                  ((double)m_ueUlAllocatedRb[rnti])) /
-                                 1e6;
-
-            uint8_t rntiMcs = (m_amc->GetMcsFromCqi(rntiCqi));
-            rntiActualThroughput = std::min(
-                rntiAchievableRate,
-                (m_amc->GetUlTbSizeFromMcs(rntiMcs, m_ueUlAllocatedRb[rnti]) / 1e-3) / 1e6);
-        }
+        const uint8_t rntiMcsFull = m_amc->GetMcsFromCqi(rntiCqi);
+        const double rntiAchievableRate =
+            m_amc->GetUlTbSizeFromMcs(rntiMcsFull, m_cschedCellConfig.m_ulBandwidth) / 1e3;
+        const double rntiActualThroughput = m_ulTput.GetMbps(rnti, nowNs);
 
         uint8_t rntiQci = GetQciForRnti(rnti);
 
-        uint32_t rntiPacketDelay = 0;
-        if (rntiTotalBuffer > 0)
-        {
-            rntiPacketDelay = (rntiAchievableRate > 0)
-                                  ? static_cast<uint32_t>((rntiTotalBuffer * 8.0) /
-                                                          (rntiAchievableRate * 1e6) * 1000.0)
-                                  : 0;
-        }
+        const uint32_t rntiPacketDelay = m_ulWaiting.GetWaitingMs(rnti, nowNs);
 
         uint32_t rntiTotalBytesServed = 0;
         auto itUlByteServed = m_ueUlTotalBytesServed.find(rnti);
@@ -1835,161 +1855,163 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
     Py2Cpp* py2Cpp = m_shmInterface->GetPy2CppStruct();
     E3Control* e3Control = &(py2Cpp->e3Control);
     E2RcControl* e2RcControl = &(py2Cpp->e2RcControl);
+
+    bool validCtrl = true;
     if (e3Control->type != E3SM_CONTROL)
     {
-        std::cerr << "ib-ORAN LTE MAC Scheduler: dApp responded with an invalid message type: "
-                     "Skipping.\n";
-        m_shmInterface->CppRecvEnd();
-        return;
+        std::cerr << "ib-ORAN LTE MAC Scheduler: dApp responded with an invalid message type.\n";
+        validCtrl = false;
     }
-    if (e2RcControl->type != E2SM_RC_CONTROL)
+    else if (e2RcControl->type != E2SM_RC_CONTROL)
     {
-        std::cerr << "ib-ORAN LTE MAC Scheduler: xApp responded with an invalid message type: "
-                     "Skipping.\n";
-        m_shmInterface->CppRecvEnd();
-        return;
+        std::cerr << "ib-ORAN LTE MAC Scheduler: xApp responded with an invalid message type.\n";
+        validCtrl = false;
     }
-    if (e3Control->linkDirection != UPLINK)
+    else if (e3Control->linkDirection != UPLINK || e2RcControl->linkDirection != UPLINK)
     {
         std::cerr
-            << "ib-ORAN LTE MAC Scheduler: dApp responded to different link direction: Skipping.\n";
-        m_shmInterface->CppRecvEnd();
-        return;
+            << "ib-ORAN LTE MAC Scheduler: controller responded to a different link direction.\n";
+        validCtrl = false;
     }
-    if (e2RcControl->linkDirection != UPLINK)
+
+    if (validCtrl)
     {
-        std::cerr
-            << "ib-ORAN LTE MAC Scheduler: xApp responded to different link direction: Skipping.\n";
-        m_shmInterface->CppRecvEnd();
-        return;
-    }
-    uint32_t maxUeSchedSize = e2RcControl->maxUeSchedSize;
-    uint32_t ueSchedSize = std::min(e3Control->ueSchedSize, maxUeSchedSize);
-    if (!e3Control->skipThisStep && !e2RcControl->skipThisStep && ueSchedSize > 0)
-    {
-        for (uint32_t i = 0; i < e2RcControl->maxUeSchedSize; i++)
+        uint32_t maxUeSchedSize = e2RcControl->maxUeSchedSize;
+        uint32_t ueSchedSize = std::min(e3Control->ueSchedSize, maxUeSchedSize);
+        if (!e3Control->skipThisStep && !e2RcControl->skipThisStep && ueSchedSize > 0)
         {
-            uint16_t rntiFromXApp = e2RcControl->ue[i].rnti;
-            m_ueUlMaxRbgAllocation[rntiFromXApp] = e2RcControl->ue[i].maxRbgAllocation;
-        }
-
-        uint32_t totalRbAllocated = 0;
-        for (uint32_t i = 0; i < ueSchedSize; i++)
-        {
-            uint16_t rnti = e3Control->ue[i].rnti;
-            uint16_t rbgStart = e3Control->ue[i].initAllocatedRbg;
-            uint16_t rbgLen = e3Control->ue[i].numAllocatedRbg;
-            uint8_t mcs = e3Control->ue[i].mcs;
-
-            uint16_t maxRbgAllocation = 0;
-            auto it = m_ueUlMaxRbgAllocation.find(rnti);
-            if (it != m_ueUlMaxRbgAllocation.end())
+            for (uint32_t i = 0; i < e2RcControl->maxUeSchedSize; i++)
             {
-                maxRbgAllocation = it->second;
-                rbgLen = std::min(rbgLen, maxRbgAllocation);
-            }
-            else
-            {
-                std::cerr << "ib-ORAN LTE MAC Scheduler: xApp and dApp sent inconsistent RNTIs: "
-                             "Skipping.\n";
-                continue;
+                uint16_t rntiFromXApp = e2RcControl->ue[i].rnti;
+                m_ueUlMaxRbgAllocation[rntiFromXApp] = e2RcControl->ue[i].maxRbgAllocation;
             }
 
-            if (mcs > 28)
+            uint32_t totalRbAllocated = 0;
+            for (uint32_t i = 0; i < ueSchedSize; i++)
             {
-                std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent invalid MCS " << (int)mcs
-                          << " for RNTI " << rnti << ": Skipping.\n";
-                continue;
-            }
+                uint16_t rnti = e3Control->ue[i].rnti;
+                uint16_t rbgStart = e3Control->ue[i].initAllocatedRbg;
+                uint16_t rbgLen = e3Control->ue[i].numAllocatedRbg;
+                uint8_t mcs = e3Control->ue[i].mcs;
 
-            if (rbgStart + rbgLen > m_cschedCellConfig.m_ulBandwidth || rbgLen > maxRbgAllocation)
-            {
-                std::cerr
-                    << "ib-ORAN LTE MAC Scheduler: dApp sent out-of-bound RB allocation for RNTI "
-                    << rnti << ": Skipping.\n";
-                continue;
-            }
-
-            if (totalRbAllocated + rbgLen >
-                (uint32_t)(m_cschedCellConfig.m_ulBandwidth - rbAllocatedNum))
-            {
-                NS_LOG_WARN("Controller over-allocated UL RBs: Stopping allocations");
-                break;
-            }
-
-            // check if RBs are free
-            bool free = true;
-            for (uint8_t rb = rbgStart; rb < rbgStart + rbgLen; rb++)
-            {
-                if (rbMap.at(rb))
+                uint16_t maxRbgAllocation = 0;
+                auto it = m_ueUlMaxRbgAllocation.find(rnti);
+                if (it != m_ueUlMaxRbgAllocation.end())
                 {
-                    free = false;
-                    NS_LOG_INFO(this << " BUSY " << rb);
+                    maxRbgAllocation = it->second;
+                    rbgLen = std::min(rbgLen, maxRbgAllocation);
                 }
-            }
-            if (!free)
-            {
-                NS_LOG_WARN(this << " RB allocation conflict for RNTI " << rnti << ": Skipping.\n");
-                continue;
-            }
+                else
+                {
+                    maxRbgAllocation = rbgLen;
+                }
 
-            for (uint8_t rb = rbgStart; rb < rbgStart + rbgLen; rb++)
-            {
-                rbMap.at(rb) = true;
-                rbgAllocationMap.at(rb) = rnti;
-                NS_LOG_INFO("\t Allocated RB " << rb);
-            }
-            totalRbAllocated += rbgLen;
+                if (rbgLen == 0)
+                {
+                    continue;
+                }
 
-            UlDciListElement_s ulDci;
-            ulDci.m_rnti = rnti;
-            ulDci.m_rbStart = rbgStart;
-            ulDci.m_rbLen = rbgLen;
-            ulDci.m_mcs = mcs;
-            uint32_t tbSize = m_amc->GetUlTbSizeFromMcs(mcs, rbgLen) / 8;
-            ulDci.m_tbSize = tbSize;
-            m_ueUlTotalBytesServed[rnti] += tbSize;
-            m_ueUlAllocatedRb[rnti] = rbgLen;
-            UpdateUlRlcBufferInfo(ulDci.m_rnti, ulDci.m_tbSize);
-            ulDci.m_ndi = 1;
-            ulDci.m_cceIndex = 0;
-            ulDci.m_aggrLevel = 1;
-            ulDci.m_ueTxAntennaSelection = 3;
-            ulDci.m_hopping = false;
-            ulDci.m_n2Dmrs = 0;
-            ulDci.m_tpc = 0;
-            ulDci.m_cqiRequest = false;
-            ulDci.m_ulIndex = 0;
-            ulDci.m_dai = 1;
-            ulDci.m_freqHopping = 0;
-            ulDci.m_pdcchPowerOffset = 0;
-            if (m_harqOn)
-            {
-                std::map<uint16_t, uint8_t>::iterator itProcId =
-                    m_ulHarqCurrentProcessId.find(rnti);
-                if (itProcId == m_ulHarqCurrentProcessId.end())
+                if (mcs > 28)
                 {
-                    NS_FATAL_ERROR("No RNTI entry in UL HARQ ID buffer for RNTI " << rnti);
+                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent invalid MCS " << (int)mcs
+                              << " for RNTI " << rnti << ": Skipping.\n";
+                    continue;
                 }
-                uint8_t harqId = (*itProcId).second;
-                std::map<uint16_t, UlHarqProcessesDciBuffer_t>::iterator itDci =
-                    m_ulHarqProcessesDciBuffer.find(rnti);
-                if (itDci == m_ulHarqProcessesDciBuffer.end())
+
+                if (rbgStart + rbgLen > m_cschedCellConfig.m_ulBandwidth ||
+                    rbgLen > maxRbgAllocation)
                 {
-                    NS_FATAL_ERROR("No RNTI entry in UL DCI HARQ buffer for RNTI " << rnti);
+                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent out-of-bound RB allocation "
+                                 "for RNTI "
+                              << rnti << ": Skipping.\n";
+                    continue;
                 }
-                (*itDci).second.at(harqId) = ulDci;
-                std::map<uint16_t, UlHarqProcessesStatus_t>::iterator itStat =
-                    m_ulHarqProcessesStatus.find(rnti);
-                if (itStat == m_ulHarqProcessesStatus.end())
+
+                if (totalRbAllocated + rbgLen >
+                    (uint32_t)(m_cschedCellConfig.m_ulBandwidth - rbAllocatedNum))
                 {
-                    NS_FATAL_ERROR("No RNTI entry in UL HARQ status buffer for RNTI " << rnti);
+                    NS_LOG_WARN("Controller over-allocated UL RBs: Stopping allocations");
+                    break;
                 }
-                (*itStat).second.at(harqId) = 1;
+
+                // check if RBs are free
+                bool free = true;
+                for (uint8_t rb = rbgStart; rb < rbgStart + rbgLen; rb++)
+                {
+                    if (rbMap.at(rb))
+                    {
+                        free = false;
+                        NS_LOG_INFO(this << " BUSY " << rb);
+                    }
+                }
+                if (!free)
+                {
+                    NS_LOG_WARN(this << " RB allocation conflict for RNTI " << rnti
+                                     << ": Skipping.\n");
+                    continue;
+                }
+
+                for (uint8_t rb = rbgStart; rb < rbgStart + rbgLen; rb++)
+                {
+                    rbMap.at(rb) = true;
+                    rbgAllocationMap.at(rb) = rnti;
+                    NS_LOG_INFO("\t Allocated RB " << rb);
+                }
+                totalRbAllocated += rbgLen;
+
+                UlDciListElement_s ulDci;
+                ulDci.m_rnti = rnti;
+                ulDci.m_rbStart = rbgStart;
+                ulDci.m_rbLen = rbgLen;
+                ulDci.m_mcs = mcs;
+                uint32_t tbSize = m_amc->GetUlTbSizeFromMcs(mcs, rbgLen) / 8;
+                ulDci.m_tbSize = tbSize;
+                m_ueUlTotalBytesServed[rnti] += tbSize;
+                const uint32_t bsrBefore = m_ceBsrRxed[rnti];
+                m_ulTput.AddServed(rnti, nowNs, std::min(tbSize, bsrBefore));
+                UpdateUlRlcBufferInfo(ulDci.m_rnti, ulDci.m_tbSize);
+                ulDci.m_ndi = 1;
+                ulDci.m_cceIndex = 0;
+                ulDci.m_aggrLevel = 1;
+                ulDci.m_ueTxAntennaSelection = 3;
+                ulDci.m_hopping = false;
+                ulDci.m_n2Dmrs = 0;
+                ulDci.m_tpc = 0;
+                ulDci.m_cqiRequest = false;
+                ulDci.m_ulIndex = 0;
+                ulDci.m_dai = 1;
+                ulDci.m_freqHopping = 0;
+                ulDci.m_pdcchPowerOffset = 0;
+                if (m_harqOn)
+                {
+                    std::map<uint16_t, uint8_t>::iterator itProcId =
+                        m_ulHarqCurrentProcessId.find(rnti);
+                    if (itProcId == m_ulHarqCurrentProcessId.end())
+                    {
+                        NS_FATAL_ERROR("No RNTI entry in UL HARQ ID buffer for RNTI " << rnti);
+                    }
+                    uint8_t harqId = (*itProcId).second;
+                    std::map<uint16_t, UlHarqProcessesDciBuffer_t>::iterator itDci =
+                        m_ulHarqProcessesDciBuffer.find(rnti);
+                    if (itDci == m_ulHarqProcessesDciBuffer.end())
+                    {
+                        NS_FATAL_ERROR("No RNTI entry in UL DCI HARQ buffer for RNTI " << rnti);
+                    }
+                    (*itDci).second.at(harqId) = ulDci;
+                    std::map<uint16_t, UlHarqProcessesStatus_t>::iterator itStat =
+                        m_ulHarqProcessesStatus.find(rnti);
+                    if (itStat == m_ulHarqProcessesStatus.end())
+                    {
+                        NS_FATAL_ERROR("No RNTI entry in UL HARQ status buffer for RNTI " << rnti);
+                    }
+                    (*itStat).second.at(harqId) = 1;
+                }
+                m_ulWaiting.MarkServed(rnti, nowNs);
+                ret.m_dciList.push_back(ulDci);
             }
-            ret.m_dciList.push_back(ulDci);
         }
     }
+
     m_shmInterface->CppRecvEnd();
     m_allocationMaps.insert(
         std::pair<uint16_t, std::vector<uint16_t>>(params.m_sfnSf, rbgAllocationMap));

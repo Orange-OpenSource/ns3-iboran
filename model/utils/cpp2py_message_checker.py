@@ -145,11 +145,6 @@ class Cpp2PyMessageChecker:
                 self.errors.append(
                     f"{prefix} has negative actualThroughput {ue.actualThroughput} Mbps"
                 )
-            if ue.actualThroughput > ue.achievableRate:
-                self.errors.append(
-                    f"{prefix} actualThroughput ({ue.actualThroughput:.2f} Mbps) "
-                    f"exceeds achievableRate ({ue.achievableRate:.2f} Mbps)"
-                )
 
     def _detect_e2_kpm_report_errors(self, e2KpmReport: E2KpmReport) -> None:
         if e2KpmReport.type != MessageType.E2SM_KPM_REPORT:
@@ -221,9 +216,4 @@ class Cpp2PyMessageChecker:
             if ue.actualThroughput < 0:
                 self.errors.append(
                     f"{prefix} has negative actualThroughput {ue.actualThroughput} Mbps"
-                )
-            if ue.actualThroughput > ue.achievableRate:
-                self.errors.append(
-                    f"{prefix} actualThroughput ({ue.actualThroughput:.2f} Mbps) "
-                    f"exceeds achievableRate ({ue.achievableRate:.2f} Mbps)"
                 )

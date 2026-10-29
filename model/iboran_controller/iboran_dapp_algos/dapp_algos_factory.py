@@ -40,9 +40,12 @@ _FAMILIES = {
 }
 
 _VALID_METRICS = {"Cqi", "BufferLevel", "PropFairness", "Criticality", "MultiCriteria"}
+_RL_ALGOS = {"NeuralLinUCB"}
 
 BASE_DAPP_ALGOS_KEYS = set(_STANDALONE) | {
-    f"{family}{metric}" for family in _FAMILIES for metric in _VALID_METRICS
+    f"{family}{metric}"
+    for family in _FAMILIES
+    for metric in _VALID_METRICS
 }
 
 PROP_FAIRNESS_TUNING_FACTOR = 0.1
@@ -56,13 +59,14 @@ def setup_dapp_algo_ue_selection(
 
     for prefix, cls in _FAMILIES.items():
         if algo_name.startswith(prefix):
-            metric = algo_name[len(prefix) :]
-            if metric not in _VALID_METRICS:
+            key = algo_name[len(prefix) :]
+
+            if key not in _VALID_METRICS:
                 raise ValueError(
-                    f"Unknown metric '{metric}' for family '{prefix}'. "
+                    f"Unknown metric '{key}' for family '{prefix}'. "
                     f"Valid metrics: {sorted(_VALID_METRICS)}"
                 )
-            return cls(k, intents, rat_type, metric=metric)
+            return cls(k, intents, rat_type, metric=key)
 
     raise ValueError(
         f"Invalid dApp UE selection algo: '{algo_name}'. "

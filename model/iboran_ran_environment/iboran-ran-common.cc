@@ -319,7 +319,7 @@ SetupFronthaulMobility(const CommonRanParams& commonParams,
         "Mode",
         StringValue("Distance"),
         "Distance",
-        DoubleValue(10.0) // change direction every 10 m
+        DoubleValue(100.0) // change direction every 100 m
     );
     ueMobility.Install(ueNodes);
 
@@ -377,8 +377,7 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
     std::filesystem::create_directories(input_dir);
     std::filesystem::create_directories(output_dir);
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    std::mt19937 gen(commonParams.rngRun);
     // random UE object ID (1 ID per input file)
     std::uniform_int_distribution<> dist(
         py2CppParams.oidRange.size() > 0 ? py2CppParams.oidRange[0] : 1,

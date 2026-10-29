@@ -42,3 +42,4 @@ class ProtocolLimits:
     MAX_PRB_NUM_NR = 264
     MAX_ID_LEN = 64
     SUBFRAMES_PER_FRAME = 10
+    FRAME_NO_WRAP = 1024

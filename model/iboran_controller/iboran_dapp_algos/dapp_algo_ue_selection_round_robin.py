@@ -19,7 +19,7 @@ class DAppAlgoUeSelectionRoundRobin(DAppAlgoUeSelection):
 
         self._reset_variables()
 
-    def process(self, candidates, e3Indication, **kwargs) -> bool:
+    def process(self, candidates, e3Indication, e2DAppControl, **kwargs) -> bool:
         "Execute the UE selection."
         _hist_link_rnti_subframe = kwargs.get("_hist_link_rnti_subframe", {})
         subframe_candidates = [

@@ -16,6 +16,8 @@
 #include "../../../nr/model/nr-mac-scheduler-ofdma.h"
 #include "../../../nr/model/nr-mac-scheduler-ue-info.h"
 #include "../iboran_interfaces/iboran-shm-structure.h"
+#include "iboran-throughput-tracker.h"
+#include "iboran-waiting-time-tracker.h"
 
 #include "ns3/ns3-ai-msg-interface.h"
 
@@ -96,13 +98,14 @@ class IbOranNrMacScheduler : public NrMacSchedulerOfdma
 
     mutable std::map<uint16_t, uint32_t> m_ueDlTotalBytesServed;
     mutable std::map<uint16_t, uint32_t> m_ueUlTotalBytesServed;
-    mutable std::map<uint16_t, uint16_t> m_ueDlAllocatedRbg;
-    mutable std::map<uint16_t, uint16_t> m_ueUlAllocatedRbg;
     mutable std::map<uint16_t, uint16_t> m_ueDlMaxRbgAllocation;
     mutable std::map<uint16_t, uint16_t> m_ueUlMaxRbgAllocation;
 
-    //
-    uint32_t m_numerology{1};
+    mutable ThroughputTracker m_dlTput{100.0};
+    mutable ThroughputTracker m_ulTput{100.0};
+
+    mutable WaitingTimeTracker m_dlWaiting;
+    mutable WaitingTimeTracker m_ulWaiting;
 
     /**
      * @brief Per-UE allocation cached by AssignDLRBG / AssignULRBG and read
@@ -115,6 +118,7 @@ class IbOranNrMacScheduler : public NrMacSchedulerOfdma
         uint8_t mcs{0};
         uint32_t symAvail{0}; ///< symbols at assignment time
         uint16_t bandwidthInRbg{0};
+        uint32_t bufBytes{0};
     };
 
     mutable std::map<uint16_t, PendingAlloc> m_pendingDlAlloc; ///< keyed by RNTI
@@ -143,6 +147,7 @@ class IbOranNrMacScheduler : public NrMacSchedulerOfdma
                           uint32_t ueIdx,
                           LinkDirection direction,
                           bool isUl,
+                          uint32_t symAvail,
                           E3Indication* e3Indication,
                           E2KpmReport* e2KpmReport) const;
 

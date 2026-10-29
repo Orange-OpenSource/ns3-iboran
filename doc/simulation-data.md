@@ -15,6 +15,8 @@ ib-ORAN supports the following image datasets, stored in the [`/notebook/dataset
 - `toy` → A sample dataset for validating the simulation framework, containing 10 object IDs. Included in this repository.
 - `market-1501` → A benchmark person re-identification dataset consisting of automatically detected bounding-box images captured across multiple overlapping outdoor camera views to evaluate object ID matching across disjoint surveillance feeds. Not included in this repository — see [`THIRD-PARTY.txt`](/THIRD-PARTY.txt) for source, license terms, and citation, and place downloaded contents in the `market-1501` folder inside the dataset repository.
 
+> Each UE is assigned one object ID drawn uniformly from `--oid_range`, seeded by `--rng_run`. The intent of each link direction is drawn from the same range with the same seed, so a narrow range keeps at least one intent-relevant UE per link in most replications. A link with no intent-relevant UE reports a `SatisfactionScore` of NaN, which the campaign averages skip.
+
 > **Note:** Additional payload formats are currently under development.
 
 ### Embedding Extraction
@@ -32,7 +34,23 @@ Each simulation run produces the following outputs:
 | Output | Location |
 |---|---|
 | Performance metrics logs | Console / log files |
+| KPIs of the run | [`/notebook/logs/kpi.json`](/notebook/logs) |
+| Merged run configuration (read by ns-3) | [`/notebook/logs/runConfig.yaml`](/notebook/logs) |
 | Recovered payload dataset | [`/notebook/dataset_dscv`](/notebook/dataset_dscv) |
 | NetAnim XML animation file | [`/notebook/netanim/`](/notebook/netanim) |
 | Real-time console flow stats | Console *(optional)* |
 | Detailed dApp / xApp control logs | [`/notebook/logs/`](/notebook/logs) *(optional)* |
+
+A campaign additionally caches the KPI records of each run in `/notebook/logs/run_data/` and reuses them on the next call. Delete this folder, together with `/notebook/logs/checkpoints/`, after any change to the simulator code.
+
+### KPI Definitions
+
+| KPI | Definition |
+|---|---|
+| `PDR` | Received / transmitted packets over all flows of the link [%] |
+| `Throughput` | Received bits over the link's active period (first transmission to last reception), divided by the number of flows [kbps per UE] |
+| `Latency` | Mean packet delay over all received packets [ms] |
+| `Jitter` | Mean packet delay variation [ms] |
+| `PRBUtilizationRatio` | PRBs allocated by the dApp / PRBs offered at the dApp decision steps [%] |
+| `SatisfactionScore` | Mean `FidelityScore` over the intent-relevant UEs of the link; a relevant UE without a usable output counts as 0 |
+| `DAppDecisionTime` / `XAppDecisionTime` | Mean wall-clock time per decision [ms] |

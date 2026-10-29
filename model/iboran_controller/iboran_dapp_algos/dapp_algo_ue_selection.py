@@ -11,6 +11,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from model.iboran_interfaces.iboran_shm_structure import E3Indication
+from model.iboran_interfaces.iboran_e2sm_dapp_structure import E2DAppControl
 from model.iboran_interfaces.iboran_shm_protocol import LinkDirection, RatType
 from model.utils.rbg_demand_calculator import RbgDemandCalculator
 from model.utils.mcs_assigner import McsAssigner
@@ -21,6 +22,7 @@ class DAppAlgoUeSelection(ABC):
 
     def __init__(self, k, intents=None, rat_type=RatType.LTE, algo_id=None):
         self.k = k
+        self.k_max = k  # configured k; self.k is the effective value of each step
         self.intents = intents
         self.rat_type = rat_type
         self.id = algo_id
@@ -54,15 +56,23 @@ class DAppAlgoUeSelection(ABC):
 
         self._metric_fn = None
 
-    def execute(self, e3Indication: E3Indication, **kwargs) -> tuple[list, list]:
+    def execute(
+        self, e3Indication: E3Indication, e2DAppControl: E2DAppControl, **kwargs
+    ) -> tuple[list, list]:
         candidates = self._derive_candidates(e3Indication)
-        self.k = min(self.k, len(candidates))
+        skipped = kwargs.get("skipped_rntis", set())
+        if skipped:
+            candidates = [
+                i for i in candidates if e3Indication.ue[i].rnti not in skipped
+            ]
+
+        self.k = min(self.k_max, len(candidates))
         if self.k == 0:
             self.selected_idx_k = []
             self.selected_rnti_k = []
             return [], []
 
-        done = self.process(candidates, e3Indication, **kwargs)
+        done = self.process(candidates, e3Indication, e2DAppControl, **kwargs)
         if not (done or self._selection_is_verified(e3Indication)):
             raise ValueError(f"{self.id} UE selection failed.")
 
@@ -72,7 +82,7 @@ class DAppAlgoUeSelection(ABC):
         return self.selected_idx_k, self.selected_rnti_k
 
     @abstractmethod
-    def process(self, candidates, e3Indication, **kwargs) -> bool:
+    def process(self, candidates, e3Indication, e2DAppControl, **kwargs) -> bool:
         "Execute the UE selection."
         ...
 
@@ -126,9 +136,13 @@ class DAppAlgoUeSelection(ABC):
         return True
 
     def _derive_rbg_needed(self, e3Indication, input_idx_vect=None) -> np.ndarray:
-        provisional_mcs = self.mcs_assigner.assign(e3Indication, input_idx_vect)
+        provisional_mcs = self.mcs_assigner.assign(
+            Cpp2PyReport=e3Indication, input_idx_vect=input_idx_vect
+        )
         rbg_needed = self.rbg_demand_calculator.compute(
-            e3Indication, input_idx_vect, provisional_mcs
+            Cpp2PyReport=e3Indication,
+            input_idx_vect=input_idx_vect,
+            assigned_mcs_k=provisional_mcs,
         )
         return rbg_needed
 

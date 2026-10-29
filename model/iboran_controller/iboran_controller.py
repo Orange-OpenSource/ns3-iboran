@@ -129,7 +129,7 @@ class IbOranController(ABC):
         current_unit = self._time_unit(report)
         elapsed = current_unit - self.last_control_unit[link_dir]
 
-        if elapsed > 0 and elapsed % self.control_period == 0:
+        if elapsed >= self.control_period:
             self.last_control_unit[link_dir] = current_unit
         else:
             self.write_primary_control(py2Cpp, report)

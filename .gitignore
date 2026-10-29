@@ -44,8 +44,9 @@ dist/
 log_*
 logs/
 .flowstats/
+checkpoints/
 results*/
-dapp_ml_convg/
+learning_convg/
 models/
 eval_data/
 netanim/

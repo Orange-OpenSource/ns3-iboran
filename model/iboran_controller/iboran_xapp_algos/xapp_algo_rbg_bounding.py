@@ -12,12 +12,15 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from model.iboran_interfaces.iboran_shm_structure import E2KpmReport
+from model.iboran_interfaces.iboran_e2sm_dapp_structure import E2DAppReport
 from model.iboran_interfaces.iboran_shm_protocol import RatType
 from model.utils.rbg_demand_calculator import RbgDemandCalculator
 from model.utils.mcs_assigner import McsAssigner
 
 
 class XAppAlgoRbgBounding(ABC):
+    _ID_PREFIX: str = ""
+
     def __init__(self, intents=None, rat_type=RatType.LTE, algo_id=None):
         self.intents = intents
         self.rat_type = rat_type
@@ -31,7 +34,9 @@ class XAppAlgoRbgBounding(ABC):
         self.rbg_demand_calculator = RbgDemandCalculator(rat_type=self.rat_type)
         self.mcs_assigner = McsAssigner(rat_type=self.rat_type)
 
-    def execute(self, e2KpmReport: E2KpmReport, **kwargs) -> tuple[list, list, list]:
+    def execute(
+        self, e2KpmReport: E2KpmReport, e2DAppReport: E2DAppReport, **kwargs
+    ) -> tuple[list, list, list]:
         candidates = self._derive_candidates(e2KpmReport)
         if len(candidates) == 0:
             self.candidate_idx = []
@@ -39,7 +44,7 @@ class XAppAlgoRbgBounding(ABC):
             self.bounded_rbg = []
             return [], [], []
 
-        done = self.process(candidates, e2KpmReport, **kwargs)
+        done = self.process(candidates, e2KpmReport, e2DAppReport, **kwargs)
         if not (done or self._selection_is_verified(e2KpmReport)):
             raise ValueError(f"{self.id} RBG bounding failed.")
 
@@ -47,7 +52,7 @@ class XAppAlgoRbgBounding(ABC):
         return self.candidate_idx, self.candidate_rnti, self.bounded_rbg
 
     @abstractmethod
-    def process(self, candidates, e2KpmReport, **kwargs) -> bool:
+    def process(self, candidates, e2KpmReport, e2DAppReport, **kwargs) -> bool:
         "Execute the RBG bounding."
         ...
 
@@ -100,8 +105,12 @@ class XAppAlgoRbgBounding(ABC):
         return True
 
     def _derive_rbg_needed(self, e2KpmReport, input_idx_vect=None) -> np.ndarray:
-        provisional_mcs = self.mcs_assigner.assign(e2KpmReport, input_idx_vect)
+        provisional_mcs = self.mcs_assigner.assign(
+            Cpp2PyReport=e2KpmReport, input_idx_vect=input_idx_vect
+        )
         rbg_needed = self.rbg_demand_calculator.compute(
-            e2KpmReport, input_idx_vect, provisional_mcs
+            Cpp2PyReport=e2KpmReport,
+            input_idx_vect=input_idx_vect,
+            assigned_mcs_k=provisional_mcs,
         )
         return rbg_needed

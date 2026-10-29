@@ -58,6 +58,8 @@ class CommonRanParams(BaseModel):
     enableIbOranSchedCoreLog: bool = False
     enableRrcLog: bool = False
 
+    rngRun: int = Field(1, ge=1)
+
 
 class LteParams(BaseModel):
     dlEarfcn: int = 2750
@@ -92,7 +94,10 @@ class OrchestratorConfig(BaseModel):
     embedder: Literal["TransReID", "CLIP"] = "TransReID"
     oid_range: tuple[int, int] = (1, 2)
     save_dapp_log: bool = False
+    save_learning_convg: bool = False
     verbose: bool = True
+
+    learning_mode: Literal["online", "train", "eval"] = "online"
 
 
 class DatasetConfig(BaseModel):

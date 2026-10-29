@@ -8,7 +8,9 @@
 #
 # Authors: see CONTRIBUTORS.md
 
-import random
+import numpy as np
+
+from model.utils.reward_terms import RewardTerms
 from .dapp_algo_ue_selection import DAppAlgoUeSelection
 
 
@@ -19,9 +21,13 @@ class DAppAlgoUeSelectionRandom(DAppAlgoUeSelection):
         super().__init__(k, intents, rat_type, algo_id=self._ID_PREFIX)
 
         self._reset_variables()
+        # replication-seeded stream, disjoint from the learners' seeds
+        self.rng = np.random.default_rng(3000 * RewardTerms(rat_type).seed)
 
-    def process(self, candidates, e3Indication, **kwargs) -> bool:
+    def process(self, candidates, e3Indication, e2DAppControl, **kwargs) -> bool:
         "Execute the UE selection."
-        self.selected_idx_k = random.sample(candidates, self.k)
+        self.selected_idx_k = [
+            int(i) for i in self.rng.choice(candidates, self.k, replace=False)
+        ]
 
         return True

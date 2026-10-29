@@ -11,7 +11,6 @@
 import numpy as np
 import math
 
-from model.iboran_interfaces.iboran_shm_structure import E3Indication
 from model.iboran_interfaces.iboran_shm_protocol import RatType, ProtocolLimits
 from model.utils.file_store import FileStore
 from model.utils.mapper import Mapper
@@ -65,13 +64,11 @@ class RbgDemandCalculator:
 
         self.mapper = Mapper()
 
-    def compute(
-        self, e3Indication: E3Indication, selected_idx_k, assigned_mcs_k
-    ) -> np.ndarray:
-        rbg_demand_k = np.zeros(len(selected_idx_k), dtype=int)
+    def compute(self, Cpp2PyReport, input_idx_vect, assigned_mcs_k) -> np.ndarray:
+        rbg_demand_k = np.zeros(len(input_idx_vect), dtype=int)
 
-        for i, idx in enumerate(selected_idx_k):
-            pending_bits = e3Indication.ue[idx].bufferLevel * 8 / self.n_layers
+        for i, idx in enumerate(input_idx_vect):
+            pending_bits = Cpp2PyReport.ue[idx].bufferLevel * 8 / self.n_layers
 
             if self.rat_type == RatType.LTE:
                 prb_demand = self._compute_prb_lte(pending_bits, assigned_mcs_k[i])
@@ -84,22 +81,16 @@ class RbgDemandCalculator:
                     f"RbgDemandCalculator: unsupported rat_type '{self.rat_type}'."
                 )
 
-            rbg_demand_k[i] = math.ceil(prb_demand / e3Indication.rbgSize)
+            rbg_demand_k[i] = math.ceil(prb_demand / Cpp2PyReport.rbgSize)
 
         return rbg_demand_k
 
     def _compute_prb_lte(self, pending_bits, mcs) -> int:
         # reverse lookup on TS 36.213 Table 7.1.7.2.1-1
         itbs = self.mapper.mcs_to_tbs_index(mcs)
-        prb_demand = max(
-            1,
-            np.searchsorted(
-                self.tbs_index_to_tbs_list[itbs],
-                pending_bits,
-            ),
-        )
-
-        return int(prb_demand)
+        row = self.tbs_index_to_tbs_list[itbs]
+        prb_demand = int(np.searchsorted(row, pending_bits, side="left")) + 1
+        return min(prb_demand, len(row))
 
     def _compute_prb_nr(self, pending_bits, mcs) -> int:
         # inverse TBS formula per TS 38.214 Section 5.1.3

@@ -153,6 +153,14 @@ static constexpr uint32_t SHM_SIZE =
     sizeof(Cpp2Py) + sizeof(Py2Cpp) +
     512; // extra buffer for future extensions or metadata if needed
 
+// == INITIALIZATION HELPERS ====================================================
+void InitE2KpmReport(E2KpmReport* e2KpmReport);
+void InitE2RcControl(E2RcControl* e2RcControl);
+void InitE3Indication(E3Indication* e3Indication);
+void InitE3Control(E3Control* e3Control);
+void InitCpp2Py(Cpp2Py* cpp2Py);
+void InitPy2Cpp(Py2Cpp* py2Cpp);
+
 } // namespace ns3
 
 #endif // IBORAN_SHM_STRUCTURE_H

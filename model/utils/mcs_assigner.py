@@ -9,7 +9,6 @@
 # Authors: see CONTRIBUTORS.md
 
 
-from model.iboran_interfaces.iboran_shm_structure import E3Indication
 from model.utils.mapper import Mapper
 
 
@@ -26,10 +25,10 @@ class McsAssigner:
 
         self.mapper = Mapper()
 
-    def assign(self, e3Indication: E3Indication, selected_idx_k) -> list[int]:
+    def assign(self, Cpp2PyReport, input_idx_vect) -> list[int]:
         assigned_mcs_k = []
-        for idx in selected_idx_k:
-            cqi = max(0, min(15, e3Indication.ue[idx].cqi))
+        for idx in input_idx_vect:
+            cqi = max(0, min(15, Cpp2PyReport.ue[idx].cqi))
             mcs = self.mapper.cqi_to_mcs(self.rat_type, cqi)
             assigned_mcs_k.append(mcs)
 

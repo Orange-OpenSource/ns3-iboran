@@ -34,12 +34,7 @@ IbOranNrMacScheduler::GetTypeId()
     static TypeId tid = TypeId("ns3::IbOranNrMacScheduler")
                             .SetParent<NrMacSchedulerOfdma>()
                             .SetGroupName("Nr")
-                            .AddConstructor<IbOranNrMacScheduler>()
-                            .AddAttribute("Numerology",
-                                          "NR numerology index (0-6)",
-                                          UintegerValue(1),
-                                          MakeUintegerAccessor(&IbOranNrMacScheduler::m_numerology),
-                                          MakeUintegerChecker<uint32_t>(0, 6));
+                            .AddConstructor<IbOranNrMacScheduler>();
     return tid;
 }
 
@@ -206,6 +201,7 @@ IbOranNrMacScheduler::FillUeIndication(const std::shared_ptr<NrMacSchedulerUeInf
                                        uint32_t ueIdx,
                                        LinkDirection direction,
                                        bool isUl,
+                                       uint32_t symAvail,
                                        E3Indication* e3Indication,
                                        E2KpmReport* e2KpmReport) const
 {
@@ -239,42 +235,19 @@ IbOranNrMacScheduler::FillUeIndication(const std::shared_ptr<NrMacSchedulerUeInf
         rntiMcs = ueInfo->m_dlMcs;
     }
 
-    // Derive throughput metrics
-    double rntiAchievableRate = 0.0;
-    double rntiActualThroughput = 0.0;
-    {
-        const auto& allocMap = isUl ? m_ueUlAllocatedRbg : m_ueDlAllocatedRbg;
-        auto it = allocMap.find(rnti);
-        if (it != allocMap.end() && it->second > 0)
-        {
-            const uint32_t numPrb = static_cast<uint32_t>(it->second) * GetNumRbPerRbg();
+    const uint64_t nowNs = Simulator::Now().GetNanoSeconds();
 
-            if (isUl)
-            {
-                rntiAchievableRate = (m_ulAmc->GetSpectralEfficiencyForCqi(rntiCqi) * 180e3 *
-                                      static_cast<double>(numPrb)) /
-                                     1e6;
-            }
-            else
-            {
-                rntiAchievableRate = (m_dlAmc->GetSpectralEfficiencyForCqi(rntiCqi) * 180e3 *
-                                      static_cast<double>(numPrb)) /
-                                     1e6;
-            }
+    // Full-band rate at the UE's current MCS over one slot (TBS in bytes)
+    const uint32_t nRbFull = GetBandwidthInRbg() * GetNumRbPerRbg();
+    const auto& amc = isUl ? m_ulAmc : m_dlAmc;
+    const uint32_t tbsFullBytes = amc->CalculateTbSize(rntiMcs, 1 /*rank*/, nRbFull * symAvail);
+    const double slotS = m_macSchedSapUser->GetSlotPeriod().GetSeconds();
+    const double rntiAchievableRate = 8.0 * tbsFullBytes / slotS / 1e6; // Mbps, per-slot peak
 
-            const Ptr<NrAmc>& amc = isUl ? m_ulAmc : m_dlAmc;
-            const double tbBits = static_cast<double>(amc->CalculateTbSize(rntiMcs, 1, numPrb) * 8);
-            rntiActualThroughput = std::min(rntiAchievableRate, (tbBits / 1e-3) / 1e6);
-        }
-    }
+    const double rntiActualThroughput = (isUl ? m_ulTput : m_dlTput).GetMbps(rnti, nowNs);
 
-    // Derive packet-delay proxy (buffer / achievable-rate)
-    uint32_t rntiPacketDelay = 0;
-    if (totalBuffer > 0 && rntiAchievableRate > 0.0)
-    {
-        rntiPacketDelay = static_cast<uint32_t>(static_cast<double>(totalBuffer) * 8.0 /
-                                                (rntiAchievableRate * 1e6) * 1000.0);
-    }
+    auto& waiting = isUl ? m_ulWaiting : m_dlWaiting;
+    const uint32_t rntiPacketDelay = (totalBuffer > 0) ? waiting.GetWaitingMs(rnti, nowNs) : 0;
 
     // Compute cumulative bytes served
     uint32_t rntiTotalBytesServed = 0;
@@ -310,6 +283,7 @@ IbOranNrMacScheduler::FillUeIndication(const std::shared_ptr<NrMacSchedulerUeInf
     e2KpmReport->ue[ueIdx].rnti = rnti;
     e2KpmReport->ue[ueIdx].cqi = rntiCqi;
     e2KpmReport->ue[ueIdx].bufferLevel = totalBuffer;
+    std::snprintf(e2KpmReport->ue[ueIdx].contentId, MAX_ID_LEN, "%s", rntiContentId.c_str());
     e2KpmReport->ue[ueIdx].qci = rntiQci;
     e2KpmReport->ue[ueIdx].achievableRate = rntiAchievableRate;
     e2KpmReport->ue[ueIdx].actualThroughput = rntiActualThroughput;
@@ -320,10 +294,9 @@ IbOranNrMacScheduler::FillUeIndication(const std::shared_ptr<NrMacSchedulerUeInf
 IbOranNrMacScheduler::SlotInfo
 IbOranNrMacScheduler::GetCurrentSlotInfo() const
 {
-    const uint32_t numerology = m_numerology; // inherited from NrMacSchedulerNs3
     const uint64_t nowNs = Simulator::Now().GetNanoSeconds();
 
-    const uint64_t slotDurationNs = 1'000'000ULL >> numerology;    // 1ms / 2^µ in ns
+    const uint64_t slotDurationNs = m_macSchedSapUser->GetSlotPeriod().GetNanoSeconds();
     const uint64_t slotsPerFrame = 10'000'000ULL / slotDurationNs; // 10ms / slotDuration
     const uint64_t slotsPerSf = 1'000'000ULL / slotDurationNs;     // 1ms  / slotDuration
 
@@ -343,6 +316,21 @@ IbOranNrMacScheduler::AssignDLRBG(uint32_t symAvail, const ActiveUeMap& activeDl
 
     BeamSymbolMap ret;
     m_pendingDlAlloc.clear();
+
+    {
+        std::set<uint16_t> backlogged;
+        for (const auto& beam : activeDl)
+        {
+            for (const auto& uePair : beam.second)
+            {
+                if (uePair.second > 0)
+                {
+                    backlogged.insert(uePair.first->m_rnti);
+                }
+            }
+        }
+        m_dlWaiting.Retain(backlogged);
+    }
 
     const uint16_t bandwidthInRbg = GetBandwidthInRbg();
 
@@ -373,6 +361,9 @@ IbOranNrMacScheduler::AssignDLRBG(uint32_t symAvail, const ActiveUeMap& activeDl
     E3Indication* e3Indication = &cpp2Py->e3Indication;
     E2KpmReport* e2KpmReport = &cpp2Py->e2KpmReport;
 
+    InitE3Indication(e3Indication);
+    InitE2KpmReport(e2KpmReport);
+
     uint32_t ueIdx = 0;
     uint32_t totalBuffer = 0;
 
@@ -389,6 +380,7 @@ IbOranNrMacScheduler::AssignDLRBG(uint32_t symAvail, const ActiveUeMap& activeDl
                              ueIdx,
                              LinkDirection::DOWNLINK,
                              /*isUl=*/false,
+                             symAvail,
                              e3Indication,
                              e2KpmReport);
             totalBuffer += uePair.second;
@@ -478,7 +470,7 @@ IbOranNrMacScheduler::AssignDLRBG(uint32_t symAvail, const ActiveUeMap& activeDl
         return ret;
     }
 
-    // Absorb per-UE maximum RBG cap from xApp.
+    // Absorb per-UE maximum RBG bound from xApp.
     for (uint32_t i = 0; i < e2RcControl->maxUeSchedSize; ++i)
     {
         m_ueDlMaxRbgAllocation[e2RcControl->ue[i].rnti] = e2RcControl->ue[i].maxRbgAllocation;
@@ -500,13 +492,9 @@ IbOranNrMacScheduler::AssignDLRBG(uint32_t symAvail, const ActiveUeMap& activeDl
         }
 
         auto itMax = m_ueDlMaxRbgAllocation.find(rnti);
-        if (itMax == m_ueDlMaxRbgAllocation.end())
-        {
-            std::cerr << "ib-ORAN NR MAC Scheduler: RNTI=" << rnti
-                      << " missing xApp cap: Skipping.\n";
-            continue;
-        }
-        const uint16_t maxRbg = itMax->second;
+        const uint16_t maxRbg = (itMax != m_ueDlMaxRbgAllocation.end())
+                                    ? itMax->second
+                                    : static_cast<uint16_t>(e3Control->ue[i].numAllocatedRbg);
         const uint16_t rbgLen =
             std::min(static_cast<uint16_t>(e3Control->ue[i].numAllocatedRbg), maxRbg);
 
@@ -517,65 +505,77 @@ IbOranNrMacScheduler::AssignDLRBG(uint32_t symAvail, const ActiveUeMap& activeDl
             continue;
         }
 
-        // Conflict / notch check.
-        bool skip = false;
-        for (uint16_t r = rbgStart; r < rbgStart + rbgLen; ++r)
-        {
-            if (rbgMap[r])
-            {
-                NS_LOG_ERROR("DL: RBG " << r << " already occupied RNTI=" << rnti);
-                skip = true;
-                break;
-            }
-            if (!dlBitmask[r])
-            {
-                NS_LOG_WARN("DL: RBG " << r << " notched RNTI=" << rnti);
-                skip = true;
-                break;
-            }
-        }
-        if (skip)
-        {
-            continue;
-        }
-
-        // Mark RBGs occupied.
-        for (uint16_t r = rbgStart; r < rbgStart + rbgLen; ++r)
-        {
-            rbgMap[r] = true;
-        }
-
-        // Cache for CreateDlDci.
-        PendingAlloc pa;
-        pa.rbgStart = rbgStart;
-        pa.rbgLen = rbgLen;
-        pa.mcs = mcs;
-        pa.symAvail = symAvail;
-        pa.bandwidthInRbg = bandwidthInRbg;
-        m_pendingDlAlloc[rnti] = pa;
-
-        // Set m_dlRBG and m_dlSym on the UeInfo so the base-class
-        // DoScheduleDlData loop calls CreateDlDci for this UE.
+        // Locate the UE and its buffer before committing anything
+        std::shared_ptr<NrMacSchedulerUeInfo> ueInfo;
+        uint32_t ueBuf = 0;
         for (const auto& beam : activeDl)
         {
             for (const auto& uePair : beam.second)
             {
                 if (uePair.first->m_rnti == rnti)
                 {
-                    auto& ueInfo = uePair.first;
-                    ueInfo->m_dlRBG.clear();
-                    ueInfo->m_dlSym.clear();
-                    for (uint16_t r = rbgStart; r < rbgStart + rbgLen; ++r)
-                    {
-                        ueInfo->m_dlRBG.push_back(r);
-                    }
-                    for (uint32_t s = 0; s < symAvail; ++s)
-                    {
-                        ueInfo->m_dlSym.push_back(static_cast<uint8_t>(s));
-                    }
+                    ueInfo = uePair.first;
+                    ueBuf = uePair.second;
                     break;
                 }
             }
+            if (ueInfo)
+            {
+                break;
+            }
+        }
+        if (!ueInfo)
+        {
+            NS_LOG_DEBUG("RNTI=" << rnti << " not in active set (held allocation): skipping");
+            continue;
+        }
+
+        if (ueBuf < 16)
+        {
+            NS_LOG_WARN("DL: RNTI=" << rnti << " buffer only " << ueBuf << " bytes: skipping");
+            continue;
+        }
+
+        bool skip = false;
+        for (uint16_t r = rbgStart; r < rbgStart + rbgLen; ++r)
+        {
+            if (rbgMap[r] || !dlBitmask[r])
+            {
+                NS_LOG_WARN("DL: RBG " << r << " occupied or notched RNTI=" << rnti);
+                skip = true;
+                break;
+            }
+        }
+
+        if (skip)
+        {
+            continue;
+        }
+
+        for (uint16_t r = rbgStart; r < rbgStart + rbgLen; ++r)
+        {
+            rbgMap[r] = true;
+        }
+
+        PendingAlloc pa;
+        pa.rbgStart = rbgStart;
+        pa.rbgLen = rbgLen;
+        pa.mcs = mcs;
+        pa.symAvail = symAvail;
+        pa.bandwidthInRbg = bandwidthInRbg;
+        pa.bufBytes = ueBuf;
+        m_pendingDlAlloc[rnti] = pa;
+
+        ueInfo->m_dlRBG.clear();
+        ueInfo->m_dlSym.clear();
+        for (uint16_t r = rbgStart; r < rbgStart + rbgLen; ++r)
+        {
+            ueInfo->m_dlRBG.push_back(r);
+        }
+
+        for (uint32_t s = 0; s < symAvail; ++s)
+        {
+            ueInfo->m_dlSym.push_back(static_cast<uint8_t>(s));
         }
 
         NS_LOG_DEBUG("DL AssignRBG RNTI=" << rnti << " rbgStart=" << rbgStart << " rbgLen="
@@ -593,6 +593,21 @@ IbOranNrMacScheduler::AssignULRBG(uint32_t symAvail, const ActiveUeMap& activeUl
 
     BeamSymbolMap ret;
     m_pendingUlAlloc.clear();
+
+    {
+        std::set<uint16_t> backlogged;
+        for (const auto& beam : activeUl)
+        {
+            for (const auto& uePair : beam.second)
+            {
+                if (uePair.second > 0)
+                {
+                    backlogged.insert(uePair.first->m_rnti);
+                }
+            }
+        }
+        m_ulWaiting.Retain(backlogged);
+    }
 
     const uint16_t bandwidthInRbg = GetBandwidthInRbg();
 
@@ -621,6 +636,9 @@ IbOranNrMacScheduler::AssignULRBG(uint32_t symAvail, const ActiveUeMap& activeUl
     E3Indication* e3Indication = &cpp2Py->e3Indication;
     E2KpmReport* e2KpmReport = &cpp2Py->e2KpmReport;
 
+    InitE3Indication(e3Indication);
+    InitE2KpmReport(e2KpmReport);
+
     uint32_t ueIdx = 0;
     uint32_t totalBuffer = 0;
 
@@ -637,6 +655,7 @@ IbOranNrMacScheduler::AssignULRBG(uint32_t symAvail, const ActiveUeMap& activeUl
                              ueIdx,
                              LinkDirection::UPLINK,
                              /*isUl=*/true,
+                             symAvail,
                              e3Indication,
                              e2KpmReport);
             totalBuffer += uePair.second;
@@ -746,13 +765,9 @@ IbOranNrMacScheduler::AssignULRBG(uint32_t symAvail, const ActiveUeMap& activeUl
         }
 
         auto itMax = m_ueUlMaxRbgAllocation.find(rnti);
-        if (itMax == m_ueUlMaxRbgAllocation.end())
-        {
-            std::cerr << "ib-ORAN NR MAC Scheduler: RNTI=" << rnti
-                      << " missing xApp cap: Skipping.\n";
-            continue;
-        }
-        const uint16_t maxRbg = itMax->second;
+        const uint16_t maxRbg = (itMax != m_ueUlMaxRbgAllocation.end())
+                                    ? itMax->second
+                                    : static_cast<uint16_t>(e3Control->ue[i].numAllocatedRbg);
         const uint16_t rbgLen =
             std::min(static_cast<uint16_t>(e3Control->ue[i].numAllocatedRbg), maxRbg);
 
@@ -763,18 +778,38 @@ IbOranNrMacScheduler::AssignULRBG(uint32_t symAvail, const ActiveUeMap& activeUl
             continue;
         }
 
+        // Locate the UE and its buffer before committing anything
+        std::shared_ptr<NrMacSchedulerUeInfo> ueInfo;
+        uint32_t ueBuf = 0;
+        for (const auto& beam : activeUl)
+        {
+            for (const auto& uePair : beam.second)
+            {
+                if (uePair.first->m_rnti == rnti)
+                {
+                    ueInfo = uePair.first;
+                    ueBuf = uePair.second;
+                    break;
+                }
+            }
+            if (ueInfo)
+            {
+                break;
+            }
+        }
+
+        if (!ueInfo)
+        {
+            NS_LOG_DEBUG("RNTI=" << rnti << " not in active set (held allocation): skipping");
+            continue;
+        }
+
         bool skip = false;
         for (uint16_t r = rbgStart; r < rbgStart + rbgLen; ++r)
         {
-            if (ulRbgMap[r])
+            if (ulRbgMap[r] || !ulBitmask[r])
             {
-                NS_LOG_ERROR("UL: RBG " << r << " already occupied RNTI=" << rnti);
-                skip = true;
-                break;
-            }
-            if (!ulBitmask[r])
-            {
-                NS_LOG_WARN("UL: RBG " << r << " notched RNTI=" << rnti);
+                NS_LOG_WARN("UL: RBG " << r << " occupied or notched RNTI=" << rnti);
                 skip = true;
                 break;
             }
@@ -795,28 +830,18 @@ IbOranNrMacScheduler::AssignULRBG(uint32_t symAvail, const ActiveUeMap& activeUl
         pa.mcs = mcs;
         pa.symAvail = symAvail;
         pa.bandwidthInRbg = bandwidthInRbg;
+        pa.bufBytes = ueBuf;
         m_pendingUlAlloc[rnti] = pa;
 
-        for (const auto& beam : activeUl)
+        ueInfo->m_ulRBG.clear();
+        ueInfo->m_ulSym.clear();
+        for (uint16_t r = rbgStart; r < rbgStart + rbgLen; ++r)
         {
-            for (const auto& uePair : beam.second)
-            {
-                if (uePair.first->m_rnti == rnti)
-                {
-                    auto& ueInfo = uePair.first;
-                    ueInfo->m_ulRBG.clear();
-                    ueInfo->m_ulSym.clear();
-                    for (uint16_t r = rbgStart; r < rbgStart + rbgLen; ++r)
-                    {
-                        ueInfo->m_ulRBG.push_back(r);
-                    }
-                    for (uint32_t s = 0; s < symAvail; ++s)
-                    {
-                        ueInfo->m_ulSym.push_back(static_cast<uint8_t>(s));
-                    }
-                    break;
-                }
-            }
+            ueInfo->m_ulRBG.push_back(r);
+        }
+        for (uint32_t s = 0; s < symAvail; ++s)
+        {
+            ueInfo->m_ulSym.push_back(static_cast<uint8_t>(s));
         }
 
         NS_LOG_DEBUG("UL AssignRBG RNTI=" << rnti << " rbgStart=" << rbgStart << " rbgLen="
@@ -863,7 +888,7 @@ IbOranNrMacScheduler::CreateDlDci(PointInFTPlane* spoint,
     const uint32_t numPrb = static_cast<uint32_t>(pa.rbgLen) * GetNumRbPerRbg() * numSym;
     const uint32_t tbSize = m_dlAmc->CalculateTbSize(pa.mcs, 1 /*rank*/, numPrb);
 
-    if (tbSize < 7)
+    if (tbSize < 7 + MAC_SUBHEADER_SIZE)
     {
         // Base-class convention: return nullptr when TBS is too small for headers.
         NS_LOG_DEBUG("CreateDlDci: TBS=" << tbSize << " too small RNTI=" << rnti);
@@ -891,7 +916,6 @@ IbOranNrMacScheduler::CreateDlDci(PointInFTPlane* spoint,
     dci->m_rbgBitmask = rbgBitmask;
 
     // Update per-slot tracking.
-    m_ueDlAllocatedRbg[rnti] = pa.rbgLen;
     m_ueDlTotalBytesServed[rnti] += tbSize;
 
     NS_LOG_DEBUG("CreateDlDci RNTI=" << rnti << " symStart=" << +spoint->m_sym
@@ -899,6 +923,9 @@ IbOranNrMacScheduler::CreateDlDci(PointInFTPlane* spoint,
                                      << " rbgLen=" << pa.rbgLen << " mcs=" << +pa.mcs
                                      << " tbs=" << tbSize);
 
+    const uint64_t nowNs = Simulator::Now().GetNanoSeconds();
+    m_dlWaiting.MarkServed(rnti, nowNs);
+    m_dlTput.AddServed(rnti, nowNs, std::min(tbSize, pa.bufBytes));
     return dci;
 }
 
@@ -936,7 +963,7 @@ IbOranNrMacScheduler::CreateUlDci(PointInFTPlane* spoint,
     const uint32_t numPrb = static_cast<uint32_t>(pa.rbgLen) * GetNumRbPerRbg() * numSym;
     const uint32_t tbSize = m_ulAmc->CalculateTbSize(pa.mcs, 1 /*rank*/, numPrb);
 
-    if (tbSize < 7)
+    if (tbSize < 7 + MAC_SUBHEADER_SIZE)
     {
         NS_LOG_DEBUG("CreateUlDci: TBS=" << tbSize << " too small RNTI=" << rnti);
         return nullptr;
@@ -965,13 +992,15 @@ IbOranNrMacScheduler::CreateUlDci(PointInFTPlane* spoint,
 
     dci->m_rbgBitmask = rbgBitmask;
 
-    m_ueUlAllocatedRbg[rnti] = pa.rbgLen;
     m_ueUlTotalBytesServed[rnti] += tbSize;
 
     NS_LOG_DEBUG("CreateUlDci RNTI=" << rnti << " symStart=" << +symStart << " numSym=" << +numSym
                                      << " rbgStart=" << pa.rbgStart << " rbgLen=" << pa.rbgLen
                                      << " mcs=" << +pa.mcs << " tbs=" << tbSize);
 
+    const uint64_t nowNs = Simulator::Now().GetNanoSeconds();
+    m_ulWaiting.MarkServed(rnti, nowNs);
+    m_ulTput.AddServed(rnti, nowNs, std::min(tbSize, pa.bufBytes));
     return dci;
 }
 

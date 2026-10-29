@@ -49,7 +49,7 @@ ib-ORAN supports both 3GPP LTE and New Radio (NR) standards:
 ## Architecture
 
 <div align="center">
-  <img src="./doc/architecture.png" alt="ib-ORAN Architecture" width="70%"/>
+  <img src="./doc/architecture.png" alt="ib-ORAN Architecture" width="65%"/>
 </div>
 
 The architecture spans three control planes — non-RT RIC, near-RT RIC, and real-time dApp — interconnected via the standardized E2 and A1 interfaces, plus the newly introduced E3 interface, which is not yet standardized. The shared-memory bridge between ns-3 and the Python orchestration layer is a core design principle, enabling clean separation of simulation logic from intelligent control.
@@ -76,7 +76,7 @@ Browse the [`app-catalog.md`](/doc/app-catalog.md) for the full list of develope
 
 ib-ORAN produces intents as sets of object IDs — one set per link direction — requested by, or of interest to, a network operator. The default intent production method is:
 
-- **Pseudo-Random** — samples a fixed number of object IDs per link direction uniformly at random from `--oid_range`, seeded by `--k` for reproducibility.
+- **Pseudo-Random** — samples a fixed number of object IDs per link direction uniformly at random from `--oid_range`, seeded by `--rng_run` for reproducibility.
 
 > **Note:** More advanced intent production methods (specifying object IDs directly instead of sampling them) are currently under development.
 

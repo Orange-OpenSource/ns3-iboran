@@ -9,7 +9,7 @@
 # Authors: see CONTRIBUTORS.md
 
 
-rat_type: LTE   # LTE | NR
+rat_type: NR   # LTE | NR
 
 # ============================================================
 # ns-3 RAN Environment Configuration
@@ -37,17 +37,19 @@ common:
   enableDlFlow: true
   dlTxRepeat: 1                 # TODO: app layer doesn't yet support multiple receptions
   dlPacketSize: 512             # [bytes]
-  dlBitRate: 200000             # [bps]
+  dlBitRate: 2000000            # [bps]
   dlUseUdp: true
 
   enableUlFlow: true
   ulTxRepeat: 1
   ulPacketSize: 512             # [bytes]
-  ulBitRate: 100000             # [bps]
+  ulBitRate: 1000000            # [bps]
   ulUseUdp: true
 
   enableIbOranSchedCoreLog: false
   enableRrcLog: false
+
+  rngRun: 1
 
 lte:
   dlEarfcn: 2750    # downlink EARFCN 2750: 2620-2690 MHz, band 7
@@ -71,7 +73,7 @@ lte:
 
 nr:
   centralFrequency: 3.5e9   # [Hz] -- 28e9 (mmWave) or 3.5e9 (sub-6 GHz)
-  bandwidth: 100e6          # [Hz]
+  bandwidth: 10e6           # [Hz]
   numCc: 1
   numBwp: 1
   numerology: 1
@@ -99,11 +101,12 @@ orchestrator:
   xapp_control_period_f: 1            # xApp control period [frames]
   dapp_algo_ue_selection: "Random"    # see doc/built-in-algos.md
   xapp_algo_rbg_bounding: "Bypass"    # see doc/built-in-algos.md
-  dataset_id: "toy"                   # "toy" | "market-1501"
-  data_format: "IMAGE"                # "IMAGE" | "VIDEO" | "EMBEDDING" | "TEXT"
+  dataset_id: "market-1501"           # "toy" | "market-1501"
+  data_format: "EMBEDDING"            # "IMAGE" | "VIDEO" | "EMBEDDING" | "TEXT"
   embedder: "TransReID"               # "TransReID" | "CLIP"
-  oid_range: [1, 2]                   # [low, high], inclusive range of object IDs
+  oid_range: [4, 5]                   # [low, high], inclusive range of object IDs
   save_dapp_log: false
+  save_learning_convg: false
   verbose: true
 
 # ============================================================

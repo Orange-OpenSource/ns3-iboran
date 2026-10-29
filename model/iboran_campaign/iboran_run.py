@@ -40,11 +40,13 @@ def main():
         xapp_control_period_f=cfg.orchestrator.xapp_control_period_f,
         dapp_algo_ue_selection=cfg.orchestrator.dapp_algo_ue_selection,
         xapp_algo_rbg_bounding=cfg.orchestrator.xapp_algo_rbg_bounding,
+        learning_mode=cfg.orchestrator.learning_mode,
         dataset_id=cfg.orchestrator.dataset_id,
         data_format=cfg.orchestrator.data_format,
         embedder=cfg.orchestrator.embedder,
         oid_range=cfg.orchestrator.oid_range,
         save_dapp_log=cfg.orchestrator.save_dapp_log,
+        save_learning_convg=cfg.orchestrator.save_learning_convg,
         verbose=cfg.orchestrator.verbose,
         common_params=cfg.common,
         datasets={name: entry.model_dump() for name, entry in cfg.datasets.items()},
@@ -79,11 +81,13 @@ def _collect_cli_overrides(args) -> dict:
         "xapp_control_period_f",
         "dapp_algo_ue_selection",
         "xapp_algo_rbg_bounding",
+        "learning_mode",
         "dataset_id",
         "data_format",
         "embedder",
         "oid_range",
         "save_dapp_log",
+        "save_learning_convg",
         "verbose",
     ]
 
@@ -100,12 +104,21 @@ def _collect_cli_overrides(args) -> dict:
 
     if orchestrator_overrides:
         overrides["orchestrator"] = orchestrator_overrides
+    # replication index lives in `common`: ns-3 reads it from runConfig.yaml
+    if args.rng_run is not None:
+        overrides.setdefault("common", {})["rngRun"] = args.rng_run
     return overrides
 
 
 def _config_args():
     parser = argparse.ArgumentParser(description="ib-ORAN")
     parser.add_argument("--rat_type", default=None, help="RAT")
+    parser.add_argument(
+        "--rng_run",
+        type=int,
+        default=None,
+        help="Replication index: ns-3 RngRun and seed of all other RNGs",
+    )
     parser.add_argument(
         "--dapp_control_period_sf",
         type=int,
@@ -132,6 +145,14 @@ def _config_args():
     parser.add_argument(
         "--xapp_algo_rbg_bounding", default=None, help="xApp RBG bounding algorithm"
     )
+    parser.add_argument(
+        "--learning_mode",
+        type=str,
+        default=None,
+        choices=["online", "train", "eval"],
+        help="online: learn within the run | train: load, learn, save checkpoint "
+        "| eval: load checkpoint, frozen policies",
+    )
     parser.add_argument("--dataset_id", default=None, help="Identifier of the dataset")
     parser.add_argument("--data_format", default=None, help="Application data format")
     parser.add_argument("--embedder", default=None, help="Emedding extraction model")
@@ -143,17 +164,34 @@ def _config_args():
     )
     parser.add_argument(
         "--save_dapp_log",
-        type=lambda x: x.lower() == "true",
+        type=_str2bool,
         default=None,
         help="Save dApp control log to file",
     )
     parser.add_argument(
+        "--save_learning_convg",
+        type=_str2bool,
+        default=None,
+        help="Save learning convergence histories (train mode) to a file",
+    )
+    parser.add_argument(
         "--verbose",
-        type=lambda x: x.lower() == "true",
+        type=_str2bool,
         default=None,
         help="Print statistics and KPIs' summary to console",
     )
     return parser.parse_args()
+
+
+def _str2bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        if value.lower() in ("true", "1", "yes"):
+            return True
+        if value.lower() in ("false", "0", "no"):
+            return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got: {value!r}")
 
 
 if __name__ == "__main__":

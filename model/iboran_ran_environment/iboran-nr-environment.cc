@@ -96,7 +96,6 @@ SetupNrProtocolStack(const CommonRanParams& commonParams,
 
     // MAC scheduler setup
     nrHelper->SetSchedulerTypeId(TypeId::LookupByName("ns3::IbOranNrMacScheduler"));
-    nrHelper->SetSchedulerAttribute("Numerology", UintegerValue(nrParams.numerology));
 
     std::cout << std::setw(30) << "NR protocol stack setup" << ": OK\n";
 }
@@ -115,6 +114,9 @@ main(int argc, char* argv[])
 
     auto& commonParams = params.GetCommonRanParams();
     auto& nrParams = params.GetNrParams();
+
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(commonParams.rngRun);
 
     // -- LTE AND EPC INITIALIZATION --------------------------------------------
     Ptr<NrHelper> nrHelper = CreateObject<NrHelper>();

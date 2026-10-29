@@ -17,6 +17,8 @@ from dataclasses import replace
 import traceback
 import shutil
 import time
+import numpy as np
+import torch
 
 import model.iboran_interfaces.iboran_shm_structure_py_binding as shm_py_binding
 from ns3ai_utils import Experiment
@@ -28,7 +30,6 @@ from model.iboran_interfaces.iboran_shm_structure import SHM_SIZE
 from model.iboran_interfaces.iboran_shm_protocol import (
     LinkDirection,
     RatType,
-    ProtocolLimits,
 )
 from model.iboran_intent_producer.iboran_intent_producer_pseudo_random import (
     IbOranIntentProducerPseudoRandom,
@@ -48,24 +49,25 @@ FILE_EXTENSION = {
 }
 
 STD_KPI_TEMPLATES = {
-    "PDR": KPI("PDR", unit="[%]", sort="desc"),
-    "Throughput": KPI("Throughput", unit="[kbps]", sort="desc"),
-    "Latency": KPI("Latency", unit="[ms]", sort="asc"),
-    "Jitter": KPI("Jitter", unit="[ms]", sort="asc"),
+    "PDR": KPI("PDR", unit="(%)", sort="desc"),
+    "Throughput": KPI("Throughput", unit="(kbps)", sort="desc"),
+    "Latency": KPI("Latency", unit="(ms)", sort="asc"),
+    "Jitter": KPI("Jitter", unit="(ms)", sort="asc"),
 }
 
 _SPEC_RE = re.compile(r"%(0\d+)?([sd])")
 
 _BASE_KPI_TEMPLATES = {
     **STD_KPI_TEMPLATES,
-    "SatisfactionScore": KPI("Satisfaction Score", sort="desc"),
-    "PRBUtilizationRatio": KPI("PRB Utilization Ratio", unit="[%]", sort="asc"),
-    "DAppDecisionTime": KPI("dApp Decision Time", unit="[ms]", sort="asc"),
+    "SatisfactionScore": KPI("Intent Satisfaction Score", sort="desc"),
+    "PRBUtilizationRatio": KPI("RBG Usage", unit="(%)", sort="asc"),
+    "DAppDecisionTime": KPI("dApp Decision Time", unit="(ms)", sort="asc"),
+    "XAppDecisionTime": KPI("xApp Decision Time", unit="(ms)", sort="asc"),
 }
 
 _FLOW_KEYS = {
     "BitStats": ["txPackets", "rxPackets", "rxBytes"],
-    "TimeStats": ["timeLastRxPacket", "delaySum", "jitterSum"],
+    "TimeStats": ["timeFirstTxPacket", "timeLastRxPacket", "delaySum", "jitterSum"],
     "LinkStats": [
         "sourceAddress",
         "destinationAddress",
@@ -86,11 +88,13 @@ class IbOranOrchestrator:
         xapp_control_period_f: int,
         dapp_algo_ue_selection: str,
         xapp_algo_rbg_bounding: str,
+        learning_mode: str,
         dataset_id: str,
         data_format: str,
         embedder: str,
         oid_range: tuple[int, int],
         save_dapp_log: bool,
+        save_learning_convg: bool,
         verbose: bool,
         common_params: CommonRanParams,
         datasets: dict[str, dict],
@@ -100,11 +104,13 @@ class IbOranOrchestrator:
         self.xapp_control_period_f = xapp_control_period_f
         self.dapp_algo_ue_selection = dapp_algo_ue_selection
         self.xapp_algo_rbg_bounding = xapp_algo_rbg_bounding
+        self.learning_mode = learning_mode
         self.dataset_id = dataset_id
         self.data_format = data_format
         self.embedder = embedder
         self.oid_range = oid_range
         self.save_dapp_log = save_dapp_log
+        self.save_learning_convg = save_learning_convg
         self.verbose = verbose
         self.common_params = common_params
         self.datasets = datasets
@@ -135,6 +141,23 @@ class IbOranOrchestrator:
         self.flow_stats = FlowStatsAnalyzer(self.notebook_dir, verbose=self.verbose)
 
     def execute(self, k=1) -> int:
+        self.k = k  # part of the checkpoint key: a policy is trained per k
+
+        # eval without a trained checkpoint would silently evaluate initial weights
+        uses_learning = any(
+            "Learning" in name
+            for name in (self.dapp_algo_ue_selection, self.xapp_algo_rbg_bounding)
+        )
+        if (
+            self.learning_mode == "eval"
+            and uses_learning
+            and not self._checkpoint_path().exists()
+        ):
+            raise FileNotFoundError(
+                f"ib-ORAN Orchestrator: eval mode needs {self._checkpoint_path()}; "
+                f"run IbOranCampaign.pretrain for this pattern first."
+            )
+
         if self.rat_type == RatType.LTE:
             exp = Experiment(
                 "ns3iboran_lte",
@@ -173,7 +196,7 @@ class IbOranOrchestrator:
 
         self.intent_producer.produce(
             num_intended_oids=1,
-            seed=k,  # NOTE: Arbitrary setup for reproducibility
+            seed=self.common_params.rngRun,
         )
 
         self.xapp_scheduler = IbOranXAppMacScheduler(
@@ -191,6 +214,13 @@ class IbOranOrchestrator:
             k=k,
             algo_ue_selection=self.dapp_algo_ue_selection,
         )
+
+        ckpt = self._checkpoint_path()
+        if self.learning_mode in ("train", "eval") and ckpt.exists():
+            state = torch.load(ckpt, weights_only=False)
+            for role, learner in self._learners().items():
+                if role in state:
+                    learner.load_state_dict(state[role])
 
         print("ib-ORAN Orchestrator: MAC Scheduler xApps and dApps initialized.")
 
@@ -232,22 +262,46 @@ class IbOranOrchestrator:
                 self.dapp_scheduler.print_stats()
 
             for link in LINKS:
-                if self.dapp_scheduler.stats.steps[link] > 0:
-                    self.kpi["PRBUtilizationRatio"][
-                        link
-                    ].measure = self.dapp_scheduler.sum_allocated_rb[link] / (
-                        ProtocolLimits.MAX_PRB_NUM_LTE
-                        if self.rat_type == RatType.LTE
-                        else ProtocolLimits.MAX_PRB_NUM_NR
+                dapp_stats, xapp_stats = (
+                    self.dapp_scheduler.stats,
+                    self.xapp_scheduler.stats,
+                )
+
+                if (
+                    dapp_stats.decisions[link] > 0
+                    and self.dapp_scheduler.sum_available_rb[link] > 0
+                ):
+                    self.kpi["PRBUtilizationRatio"][link].measure = (
+                        100.0
+                        * self.dapp_scheduler.sum_allocated_rb[link]
+                        / self.dapp_scheduler.sum_available_rb[link]
                     )
                     self.kpi["DAppDecisionTime"][link].measure = (
-                        10e3
-                        * self.dapp_scheduler.stats.decision_time[link]
-                        / self.dapp_scheduler.stats.steps[link]
+                        1e3
+                        * dapp_stats.decision_time[link]
+                        / dapp_stats.decisions[link]
+                    )  # ms
+
+                if xapp_stats.decisions[link] > 0:
+                    self.kpi["XAppDecisionTime"][link].measure = (
+                        1e3
+                        * xapp_stats.decision_time[link]
+                        / xapp_stats.decisions[link]
                     )  # ms
 
             self.flow_stats.compute_std_kpis(self.kpi)
             self.compute_ib_kpis()
+
+            if self.learning_mode == "train" and self._learners():
+                ckpt = self._checkpoint_path()
+                ckpt.parent.mkdir(parents=True, exist_ok=True)
+                torch.save(
+                    {r: a.state_dict() for r, a in self._learners().items()}, ckpt
+                )
+                if self.save_learning_convg:
+                    for learner in self._learners().values():
+                        if hasattr(learner, "save_convergence"):
+                            learner.save_convergence(ckpt.stem)
 
             if shm_interface is not None:
                 del shm_interface
@@ -256,6 +310,24 @@ class IbOranOrchestrator:
             time.sleep(0.1)  # give OS time to fully release
 
         return 0
+
+    def _checkpoint_path(self) -> Path:
+        return (
+            self.notebook_dir
+            / "logs"
+            / "checkpoints"
+            / (
+                f"{self.rat_type}_{self.dapp_algo_ue_selection}_{self.xapp_algo_rbg_bounding}"
+                f"_{self.dapp_control_period_sf}_{self.xapp_control_period_f}_{self.k}.pt"
+            )
+        )
+
+    def _learners(self) -> dict:
+        roles = {
+            "dapp": self.dapp_scheduler.algo_ue_selection,
+            "xapp": self.xapp_scheduler.algo_rbg_bounding,
+        }
+        return {r: a for r, a in roles.items() if hasattr(a, "state_dict")}
 
     def compute_ib_kpis(self) -> None:
         if self.verbose:
@@ -273,11 +345,20 @@ class IbOranOrchestrator:
                 self.common_params.ueNum,
             )
 
+            # SatisfactionScore = mean over all UEs of relevance * fidelity,
+            # i.e. the FidelityScore restricted to intent-relevant UEs, so
+            # SatisfactionScore <= FidelityScore always
+            sat_sum = 0.0
+
             for idx in range(self.common_params.ueNum):
                 raw_object_id = idx_to_object_id.get(idx)
                 if raw_object_id is None:
                     continue
                 object_id = str(raw_object_id)
+
+                intent_relevance = (
+                    1 if object_id in self.intent_producer.intents[link] else 0
+                )
 
                 output_stem = self.dataset.build_stem(
                     "output",
@@ -311,23 +392,20 @@ class IbOranOrchestrator:
                     print("ib-ORAN Orchestrator: IB-KPI computation failed.\n")
                     continue
 
-                intent_relevance = (
-                    1 if object_id in self.intent_producer.intents[link] else 0
-                )
-
-                fidelity_increment = 0.0
+                ue_fidelity = 0.0
                 for key in self.ib_kpi_backend.metrics.keys():
-                    raw_measure = (
-                        self.ib_kpi_backend.metrics[key].measure
-                        / self.common_params.ueNum
-                    )
-                    self.kpi[key][link].measure += raw_measure
+                    measure = self.ib_kpi_backend.metrics[key].measure
+                    if not np.isfinite(measure):
+                        measure = 0.0  # one NaN must not poison the link aggregate
+                    self.kpi[key][link].measure += measure / self.common_params.ueNum
                     if key == "FidelityScore":
-                        fidelity_increment = intent_relevance * raw_measure
-                self.kpi["SatisfactionScore"][link].measure += fidelity_increment
+                        ue_fidelity = measure
+
+                sat_sum += intent_relevance * ue_fidelity
 
                 self._vprint(
-                    f'{"Intent satisfaction":<22}: ' f"{fidelity_increment:.2f}"
+                    f'{"Intent satisfaction":<22}: '
+                    f"{intent_relevance * ue_fidelity:.2f}"
                 )
 
                 if self.verbose:
@@ -335,6 +413,10 @@ class IbOranOrchestrator:
                         print()
                         self.ib_kpi_backend.print_spatial_map()
                     print()
+
+            self.kpi["SatisfactionScore"][link].measure = (
+                sat_sum / self.common_params.ueNum
+            )
 
     def _prepare_kpi(self) -> None:
         if self.data_format == "IMAGE":
@@ -413,8 +495,21 @@ class FlowStatsAnalyzer:
 
     def compute_std_kpis(self, kpi: dict) -> None:
         self.link_n_flows = self._per_link(int)
+        agg = {
+            l: dict(
+                tx=0,
+                rx=0,
+                bytes=0,
+                delay=0.0,
+                jitter=0.0,
+                jit_n=0,
+                t0=float("inf"),
+                t1=0.0,
+            )
+            for l in LINKS
+        }
 
-        for stats, flow_kpis in self._get_flowstats():
+        for stats, _ in self._get_flowstats():
             if stats["sourceAddress"] == "1.0.0.2" and stats[
                 "destinationAddress"
             ].startswith("7.0.0"):
@@ -425,15 +520,33 @@ class FlowStatsAnalyzer:
                 link = LinkDirection.UPLINK
             else:
                 continue
-
-            for flow_kpi_key, flow_kpi_value in flow_kpis.items():
-                kpi[flow_kpi_key][link].measure += flow_kpi_value.measure
+            a = agg[link]
+            a["tx"] += stats["txPackets"]
+            a["rx"] += stats["rxPackets"]
+            a["bytes"] += stats["rxBytes"]
+            a["delay"] += stats["delaySum"]
+            a["jitter"] += stats["jitterSum"]
+            a["jit_n"] += max(stats["rxPackets"] - 1, 0)
+            if stats["rxPackets"] > 0:
+                a["t0"] = min(a["t0"], stats["timeFirstTxPacket"])
+                a["t1"] = max(a["t1"], stats["timeLastRxPacket"])
             self.link_n_flows[link] += 1
 
-        for link in LINKS:
-            if self.link_n_flows[link] > 0:
-                for flow_kpi_key in STD_KPI_TEMPLATES.keys():
-                    kpi[flow_kpi_key][link].measure /= self.link_n_flows[link]
+        for link, a in agg.items():
+            if a["tx"] > 0:
+                kpi["PDR"][link].measure = 100.0 * a["rx"] / a["tx"]
+            if a["rx"] > 0:
+                kpi["Latency"][link].measure = 1e3 * a["delay"] / a["rx"]  # ms
+            if a["jit_n"] > 0:
+                kpi["Jitter"][link].measure = 1e3 * a["jitter"] / a["jit_n"]  # ms
+            if a["t1"] > a["t0"] and self.link_n_flows[link] > 0:
+                kpi["Throughput"][link].measure = (
+                    a["bytes"]
+                    * 8.0
+                    / (a["t1"] - a["t0"])
+                    / 1e3
+                    / self.link_n_flows[link]
+                )  # kbps per UE
 
         if self.verbose:
             self._print_std_kpis(kpi)
@@ -494,9 +607,10 @@ class FlowStatsAnalyzer:
             flow_kpis["PDR"].measure = 0
             self._vprint(f"{'PDR':<22}: nan")
 
-        if stats["timeLastRxPacket"] > 0:
+        duration = stats["timeLastRxPacket"] - stats["timeFirstTxPacket"]
+        if duration > 0:
             flow_kpis["Throughput"].measure = (stats["rxBytes"] * 8.0) / (
-                stats["timeLastRxPacket"] * 1e3
+                duration * 1e3
             )  # kbps
             self._vprint(
                 f"{'Throughput':<22}: {flow_kpis['Throughput'].measure:.2f} kbps"

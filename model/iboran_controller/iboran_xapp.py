@@ -26,6 +26,7 @@ from model.iboran_interfaces.iboran_shm_protocol import (
     LinkDirection,
     RatType,
     MessageType,
+    ProtocolLimits,
 )
 from model.iboran_controller.iboran_controller import IbOranController
 
@@ -93,7 +94,7 @@ class IbOranXApp(IbOranController):
             )
 
     def _time_unit(self, report: E2KpmReport) -> int:
-        return report.frameNo
+        return report.timestamp // 10_000_000
 
     def _reset_primary_control_to_skip(self, link_dir: LinkDirection) -> None:
         self._e2_rc_control[link_dir].skipThisStep = True

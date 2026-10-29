@@ -12,12 +12,14 @@ import numpy as np
 import pandas as pd
 import subprocess
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 from IPython.display import display
 from itertools import product
 from tqdm.auto import tqdm
 import tol_colors as tc
 import shutil
 import os
+from pathlib import Path
 
 from model.iboran_interfaces.iboran_shm_protocol import LinkDirection, RatType
 
@@ -39,13 +41,15 @@ class IbOranCampaign:
         self,
         run_cwd,
         run_env,
-        mc_iterations=1,
-        dataset_id="toy",
-        data_format="IMAGE",
-        embedder="TransReID",
-        oid_range=[1, 2],
-        save_dapp_log="false",
-        verbose="false",
+        mc_iterations,
+        dataset_id,
+        data_format,
+        embedder,
+        oid_range,
+        save_dapp_log,
+        save_learning_convg,
+        verbose,
+        n_pretrain_runs=1,
     ):
         self.run_cwd = run_cwd
         self.run_env = run_env
@@ -55,7 +59,9 @@ class IbOranCampaign:
         self.embedder = embedder
         self.oid_range = oid_range
         self.save_dapp_log = save_dapp_log
+        self.save_learning_convg = save_learning_convg
         self.verbose = verbose
+        self.n_pretrain_runs = n_pretrain_runs
 
         self.results = []
 
@@ -104,7 +110,21 @@ class IbOranCampaign:
             )
             self.results.extend(records)
 
-        self.df_raw = pd.DataFrame(self.results)
+        # successive run() calls (e.g. one-factor sweeps sharing the base
+        # configuration) must not count the same replication twice
+        self.df_raw = pd.DataFrame(self.results).drop_duplicates(
+            subset=[
+                "rat_type",
+                "dapp_control_period_sf",
+                "xapp_control_period_f",
+                "k",
+                "dapp_algo_ue_selection",
+                "xapp_algo_rbg_bounding",
+                "mc_idx",
+                "link",
+            ],
+            keep="last",
+        )
 
         self.df = (
             self.df_raw.groupby(
@@ -138,19 +158,48 @@ class IbOranCampaign:
     ) -> list[dict]:
         records_store = FileStore(
             script_dir=".",
-            folder_name="logs/run_logs",
+            folder_name="logs/run_data",
             log_name=f"{rat_type}{dapp_control_period_sf}{xapp_control_period_f}"
             f"{k}{dapp_algo_ue_selection}{xapp_algo_rbg_bounding}{mc_idx}"
             f"{self.dataset_id}{self.data_format}{self.embedder}"
-            f"{''.join(map(str, self.oid_range))}.joblib",
+            f"{''.join(map(str, self.oid_range))}eval.joblib",
         )
         if records_store.exists():
             saved_records = records_store.joblib_load()
             return saved_records
 
+        uses_learning = any(
+            "Learning" in name
+            for name in (dapp_algo_ue_selection, xapp_algo_rbg_bounding)
+        )
+        if (
+            uses_learning
+            and not self._checkpoint_path(
+                rat_type,
+                dapp_algo_ue_selection,
+                xapp_algo_rbg_bounding,
+                dapp_control_period_sf,
+                xapp_control_period_f,
+                k,
+            ).exists()
+        ):
+            self.pretrain(
+                rat_type,
+                dapp_control_period_sf,
+                xapp_control_period_f,
+                k,
+                dapp_algo_ue_selection,
+                xapp_algo_rbg_bounding,
+                self.n_pretrain_runs,
+            )
+
         self._cleanup()
 
-        subprocess.run(
+        # a failed run must never be recorded with the KPIs of a previous run
+        kpi_store = FileStore(".", "logs", "kpi.json")
+        kpi_store.remove()
+
+        proc = subprocess.run(
             [
                 "python3",
                 "iboran_run.py",
@@ -165,15 +214,25 @@ class IbOranCampaign:
                 f"--embedder={self.embedder}",
                 f"--oid_range={','.join(map(str, self.oid_range))}",
                 f"--save_dapp_log={'true' if self.save_dapp_log else 'false'}",
+                f"--save_learning_convg={'true' if self.save_learning_convg else 'false'}",
                 f"--verbose={'true' if self.verbose else 'false'}",
+                "--learning_mode=eval",
+                f"--rng_run={mc_idx + 1}",
             ],
-            capture_output=self.verbose,
-            text=self.verbose,
+            capture_output=not self.verbose,
+            text=not self.verbose,
             cwd=self.run_cwd,
             env=self.run_env,
         )
+        if proc.returncode != 0 or not kpi_store.exists():
+            raise RuntimeError(
+                f"ib-ORAN Campaign: run failed (rc={proc.returncode}) for "
+                f"{rat_type}/{dapp_algo_ue_selection}/{xapp_algo_rbg_bounding} "
+                f"sf={dapp_control_period_sf} f={xapp_control_period_f} k={k} "
+                f"mc_idx={mc_idx}\n{(proc.stderr or '')[-2000:]}"
+            )
 
-        kpi = FileStore(".", "logs", "kpi.json").json_load()
+        kpi = kpi_store.json_load()
 
         records = [
             {
@@ -201,6 +260,63 @@ class IbOranCampaign:
 
         records_store.joblib_dump(records)
         return records
+
+    def pretrain(
+        self, rat_type, dapp_period, xapp_period, k, dapp_algo, xapp_algo, n_runs
+    ):
+        "Train one pattern over n_runs sequential replications into its checkpoint."
+        ckpt = self._checkpoint_path(
+            rat_type, dapp_algo, xapp_algo, dapp_period, xapp_period, k
+        )
+        ckpt.unlink(missing_ok=True)
+
+        for r in range(n_runs):
+            proc = subprocess.run(
+                [
+                    "python3",
+                    "iboran_run.py",
+                    f"--rat_type={rat_type}",
+                    f"--dapp_control_period_sf={dapp_period}",
+                    f"--xapp_control_period_f={xapp_period}",
+                    f"--k={k}",
+                    f"--dapp_algo_ue_selection={dapp_algo}",
+                    f"--xapp_algo_rbg_bounding={xapp_algo}",
+                    f"--dataset_id={self.dataset_id}",
+                    f"--data_format={self.data_format}",
+                    f"--embedder={self.embedder}",
+                    f"--oid_range={','.join(map(str, self.oid_range))}",
+                    "--learning_mode=train",
+                    f"--rng_run={10_000 + r}",  # disjoint from eval runs 1..mc
+                    "--save_dapp_log=false",
+                    f"--save_learning_convg={'true' if self.save_learning_convg else 'false'}",
+                    "--verbose=false",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=self.run_cwd,
+                env=self.run_env,
+            )
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    f"ib-ORAN Campaign: pretrain run {r} failed "
+                    f"(rc={proc.returncode})\n{proc.stderr[-2000:]}"
+                )
+
+        if not ckpt.exists():
+            raise RuntimeError(f"ib-ORAN Campaign: no checkpoint written at {ckpt}")
+
+    @staticmethod
+    def _checkpoint_path(
+        rat_type, dapp_algo, xapp_algo, dapp_period, xapp_period, k
+    ) -> Path:
+        "Same file as IbOranOrchestrator._checkpoint_path (contrib/iboran/notebook)."
+        return (
+            Path(__file__).resolve().parents[2]
+            / "notebook"
+            / "logs"
+            / "checkpoints"
+            / f"{rat_type}_{dapp_algo}_{xapp_algo}_{dapp_period}_{xapp_period}_{k}.pt"
+        )
 
     def plot_kpi_vs_param_per_algo(
         self,
@@ -253,7 +369,12 @@ class IbOranCampaign:
 
         # define base filter
         not_per = next(k for k in base_algos.keys() if k != per)
-        base_mask = self.df[not_per] == base_algos[not_per]
+        not_per_val = base_algos[not_per]
+        base_mask = (
+            self.df[not_per].isin(not_per_val)
+            if isinstance(not_per_val, list)
+            else self.df[not_per] == not_per_val
+        )
         for col, val in base_params.items():
             if isinstance(val, list):
                 base_mask &= self.df[col].isin(val)
@@ -311,8 +432,8 @@ class IbOranCampaign:
                                 df_algo[against],
                                 df_algo[_kpi],
                                 marker=("o" if algo.startswith("ib") else "s"),
-                                color=self.algo_kwds[algo]["color"],
-                                label=self.algo_kwds[algo]["label"],
+                                color=self.algo_kwds[per][algo]["color"],
+                                label=self.algo_kwds[per][algo]["label"],
                             )
                         ax.set_ylabel(
                             f'{self.kpi_kwds[_kpi]["label"]} {self.kpi_kwds[_kpi]["unit"]}',
@@ -322,6 +443,7 @@ class IbOranCampaign:
                             self.param_kwds[against]["label"],
                             fontsize=self.small_fontsize,
                         )
+                        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
                         ax.legend(fontsize=self.small_fontsize)
 
                     plot_fn(ax)
@@ -372,7 +494,12 @@ class IbOranCampaign:
             )
 
         not_per = next(k for k in base_algos.keys() if k != per)
-        base_mask = self.df[not_per] == base_algos[not_per]
+        not_per_val = base_algos[not_per]
+        base_mask = (
+            self.df[not_per].isin(not_per_val)
+            if isinstance(not_per_val, list)
+            else self.df[not_per] == not_per_val
+        )
 
         n_kpis = len(which_kpi)
         for rat in which_rat if isinstance(which_rat, list) else [which_rat]:
@@ -536,7 +663,12 @@ class IbOranCampaign:
             )
 
         not_per = next(k for k in base_algos if k != per)
-        base_mask = self.df[not_per] == base_algos[not_per]
+        not_per_val = base_algos[not_per]
+        base_mask = (
+            self.df[not_per].isin(not_per_val)
+            if isinstance(not_per_val, list)
+            else self.df[not_per] == not_per_val
+        )
 
         for rat in which_rat if isinstance(which_rat, list) else [which_rat]:
             rat_mask = base_mask & (self.df["rat_type"] == rat)
@@ -627,11 +759,111 @@ class IbOranCampaign:
                     for col in mean_cols:
                         styler.bar(subset=[col], vmin=0, color="#c8d8e8")
 
-                    styler.set_caption(f"Algo — {self._algo_label(algo)}")
+                    styler.set_caption(f"Algo — {self._algo_label(per, algo)}")
                     return styler
 
                 styled = df_algo.style.pipe(style_table)
                 display(styled)
+
+    def get_table_kpi_per_algo(
+        self,
+        per: str,
+        which_kpi: list[str],
+        which_dapp_algo_ue_selection: str | list[str],
+        which_xapp_algo_rbg_bounding: str | list[str],
+        which_rat: str | list[str] = [RatType.LTE, RatType.NR],
+    ) -> dict:
+        """
+        Same values as plot_table_kpi_per_algo, returned as a dict.
+
+        Returns
+        -------
+        results[rat][algo][link][kpi] = {"mean": float, "std": float}
+        """
+        base_algos = {
+            "dapp_algo_ue_selection": which_dapp_algo_ue_selection,
+            "xapp_algo_rbg_bounding": which_xapp_algo_rbg_bounding,
+        }
+        if per not in base_algos:
+            raise ValueError(
+                f"ib-ORAN Campaign: '{per}' is invalid. "
+                f"Must be one of {base_algos.keys()}."
+            )
+
+        not_per = next(k for k in base_algos if k != per)
+        not_per_val = base_algos[not_per]
+        base_mask = (
+            self.df[not_per].isin(not_per_val)
+            if isinstance(not_per_val, list)
+            else self.df[not_per] == not_per_val
+        )
+
+        results: dict = {}
+        for rat in which_rat if isinstance(which_rat, list) else [which_rat]:
+            rat_mask = base_mask & (self.df["rat_type"] == rat)
+            if self.df[rat_mask].empty:
+                continue
+
+            stats = self._compute_kpi_stats(rat_mask, per, which_kpi)
+            available = set(stats.index.get_level_values("algo"))
+            rat_results = results.setdefault(rat, {})
+
+            for algo in sorted(self.df[rat_mask][per].unique()):
+                if algo not in available:
+                    continue
+                df_algo = stats.xs(algo, level="algo").reindex(LINKS)
+                rat_results[algo] = {
+                    link: {
+                        kpi: {
+                            "mean": float(df_algo.at[link, (kpi, "mean")]),
+                            "std": float(df_algo.at[link, (kpi, "std")]),
+                        }
+                        for kpi in which_kpi
+                    }
+                    for link in LINKS
+                }
+
+        return results
+
+    def get_kpi_stats_at_config(
+        self,
+        which_kpi: list[str],
+        dapp_algo: str,
+        xapp_algo: str,
+        rat: str,
+        dapp_control_period_sf: int,
+        xapp_control_period_f: int,
+        k: int,
+    ) -> dict:
+        """
+        Mean/std over Monte Carlo iterations at one fixed configuration.
+
+        Returns
+        -------
+        results[link][kpi] = {"mean": float, "std": float, "n": int}
+        """
+        d = self.df_raw
+        mask = (
+            (d["rat_type"] == rat)
+            & (d["dapp_algo_ue_selection"] == dapp_algo)
+            & (d["xapp_algo_rbg_bounding"] == xapp_algo)
+            & (d["dapp_control_period_sf"] == dapp_control_period_sf)
+            & (d["xapp_control_period_f"] == xapp_control_period_f)
+            & (d["k"] == k)
+        )
+        sub = d[mask]
+        results = {}
+        for link in LINKS:
+            s = sub[sub["link"] == link]
+            results[link] = {
+                kpi: {
+                    "mean": float(s[kpi].mean()) if kpi in s else np.nan,
+                    "std": float(s[kpi].std()) if kpi in s else np.nan,
+                    "n": int(s[kpi].notna().sum()) if kpi in s else 0,
+                }
+                for kpi in which_kpi
+            }
+        return results
 
     def plot_table_gain_loss_kpi_per_algo(
         self,
@@ -654,7 +886,12 @@ class IbOranCampaign:
             )
 
         not_per = next(k for k in base_algos if k != per)
-        base_mask = self.df[not_per] == base_algos[not_per]
+        not_per_val = base_algos[not_per]
+        base_mask = (
+            self.df[not_per].isin(not_per_val)
+            if isinstance(not_per_val, list)
+            else self.df[not_per] == not_per_val
+        )
 
         for rat in which_rat if isinstance(which_rat, list) else [which_rat]:
             rat_mask = base_mask & (self.df["rat_type"] == rat)
@@ -671,7 +908,9 @@ class IbOranCampaign:
                 )
                 continue
 
-            gain_df = self._compute_gain_loss(stats, ref_algo, which_kpi, compare_algos)
+            gain_df = self._compute_gain_loss(
+                stats, per, ref_algo, which_kpi, compare_algos
+            )
 
             gain_df.columns.names = ["KPI", "Algorithm"]
             gain_df.index.name = None
@@ -693,13 +932,13 @@ class IbOranCampaign:
                     [
                         (
                             f'{self.kpi_kwds[kpi]["label"]} {self.kpi_kwds[kpi]["unit"]}',
-                            self._algo_label(a),
+                            self._algo_label(per, a),
                         )
                         for kpi in which_kpi
                         for a in compare_algos
                         if (
                             f'{self.kpi_kwds[kpi]["label"]} {self.kpi_kwds[kpi]["unit"]}',
-                            self._algo_label(a),
+                            self._algo_label(per, a),
                         )
                         in gain_df.columns
                     ],
@@ -760,7 +999,7 @@ class IbOranCampaign:
                     overwrite=False,
                 )
 
-                ref_label = self._algo_label(ref_algo)
+                ref_label = self._algo_label(per, ref_algo)
                 styler.set_caption(f"Ref. Algo — {ref_label}")
 
                 # Underline best gain per KPI
@@ -792,8 +1031,8 @@ class IbOranCampaign:
                         [np.abs(df_algo[kpi].mean() - np.min(df_algo[kpi]))],
                         [df_algo[kpi].std()],
                     ],
-                    color=self.algo_kwds[algo]["color"],
-                    label=self.algo_kwds[algo]["label"],
+                    color=self.algo_kwds[per][algo]["color"],
+                    label=self.algo_kwds[per][algo]["label"],
                     edgecolor=edgecolor,
                     linewidth=0.5,
                     hatch="\\" if algo.startswith("ib") else "",
@@ -818,7 +1057,7 @@ class IbOranCampaign:
                         df_algo[col].mean(),
                         width=drawn_width,
                         alpha=0.8,
-                        color=self.algo_kwds[algo]["color"],
+                        color=self.algo_kwds[per][algo]["color"],
                         capsize=5,
                         label=comp_label,
                         edgecolor=edgecolor,
@@ -832,7 +1071,7 @@ class IbOranCampaign:
                     handles[:n_components],
                     legend_labels[:n_components],
                     fontsize=self.small_fontsize,
-                    loc="center right",
+                    loc="best",
                 )
 
         ax.set_ylabel(
@@ -840,13 +1079,13 @@ class IbOranCampaign:
             fontsize=self.small_fontsize,
         )
         ax.set_xticks(list(algos_pos))
-        labels = [self.algo_kwds[algo]["label"] for algo in algos_sorted]
+        labels = [self.algo_kwds[per][algo]["label"] for algo in algos_sorted]
         ax.set_xticklabels(
             labels, rotation=45, ha="right", fontsize=self.small_fontsize
         )
 
-    def _algo_label(self, algo: str) -> str:
-        return self.algo_kwds.get(algo, {}).get("label", algo)
+    def _algo_label(self, per: str, algo: str) -> str:
+        return self.algo_kwds[per][algo]["label"]
 
     def _compute_kpi_stats(
         self,
@@ -877,6 +1116,7 @@ class IbOranCampaign:
     def _compute_gain_loss(
         self,
         stats: pd.DataFrame,
+        per: str,
         ref_algo: str,
         which_kpi: list[str],
         compare_algos: list[str],
@@ -906,7 +1146,7 @@ class IbOranCampaign:
                         if (not np.isnan(ref) and not np.isnan(val) and ref != 0)
                         else np.nan
                     )
-                    row[(kpi, self._algo_label(algo))] = delta
+                    row[(kpi, self._algo_label(per, algo))] = delta
             records.append(row)
 
         df = pd.DataFrame(records).set_index("link")
@@ -929,83 +1169,113 @@ class IbOranCampaign:
             "xapp_algo_rbg_bounding": {"label": "xApp RBG bounding Algorithm"},
         }
         self.algo_kwds = {
-            "ibRandom": {"color": tc.vibrant[6], "label": "IB Random"},
-            "Random": {"color": tc.vibrant[6], "label": "Random"},
-            "ibRoundRobin": {"color": tc.vibrant[5], "label": "IB R. Robin"},
-            "RoundRobin": {"color": tc.vibrant[5], "label": "R. Robin"},
-            "ibTopKCqi": {"color": tc.light[0], "label": "IB Top-K: CQI"},
-            "ibTopKBufferLevel": {
-                "color": tc.light[1],
-                "label": "IB Top-K: Buffer Level",
+            "dapp_algo_ue_selection": {
+                "ibRandom": {"color": tc.vibrant[6], "label": "ib Random"},
+                "Random": {"color": tc.vibrant[6], "label": "Random"},
+                "ibRoundRobin": {"color": tc.vibrant[5], "label": "ib Round Robin"},
+                "RoundRobin": {"color": tc.vibrant[5], "label": "Round Robin"},
+                "ibLearningNeuralLinUCB": {
+                    "color": tc.high_contrast[2],
+                    "label": "ib NeuralLinUCB",
+                },
+                "LearningNeuralLinUCB": {
+                    "color": tc.high_contrast[2],
+                    "label": "NeuralLinUCB",
+                },
+                "ibTopKCqi": {"color": tc.light[0], "label": "ib Top-K: CQI"},
+                "ibTopKBufferLevel": {
+                    "color": tc.light[1],
+                    "label": "ib Top-K: Buffer Level",
+                },
+                "ibTopKPropFairness": {
+                    "color": tc.light[2],
+                    "label": "ib Top-K: Prop. Fairn.",
+                },
+                "ibTopKCriticality": {
+                    "color": tc.light[3],
+                    "label": "ib Top-K: Criticality",
+                },
+                "ibTopKMultiCriteria": {
+                    "color": tc.light[4],
+                    "label": "ib Top-K: Multi-Criteria",
+                },
+                "TopKCqi": {"color": tc.light[0], "label": "Top-K: CQI"},
+                "TopKBufferLevel": {
+                    "color": tc.light[1],
+                    "label": "Top-K: Buffer Level",
+                },
+                "TopKPropFairness": {
+                    "color": tc.light[2],
+                    "label": "Top-K: Prop. Fairn.",
+                },
+                "TopKCriticality": {
+                    "color": tc.light[3],
+                    "label": "Top-K: Criticality",
+                },
+                "TopKMultiCriteria": {
+                    "color": tc.light[4],
+                    "label": "Top-K: Multi-Criteria",
+                },
+                "ibGreedyCqi": {"color": tc.vibrant[0], "label": "ib Greedy: CQI"},
+                "ibGreedyBufferLevel": {
+                    "color": tc.vibrant[1],
+                    "label": "ib Greedy: Buffer Level",
+                },
+                "ibGreedyPropFairness": {
+                    "color": tc.vibrant[2],
+                    "label": "ib Greedy: Prop. Fairn.",
+                },
+                "ibGreedyCriticality": {
+                    "color": tc.vibrant[3],
+                    "label": "ib Greedy: Criticality",
+                },
+                "ibGreedyMultiCriteria": {
+                    "color": tc.vibrant[4],
+                    "label": "ib Greedy: Multi-Criteria",
+                },
+                "GreedyCqi": {"color": tc.vibrant[0], "label": "Greedy: CQI"},
+                "GreedyBufferLevel": {
+                    "color": tc.vibrant[1],
+                    "label": "Greedy: Buffer Level",
+                },
+                "GreedyPropFairness": {
+                    "color": tc.vibrant[2],
+                    "label": "Greedy: Prop. Fairn.",
+                },
+                "GreedyCriticality": {
+                    "color": tc.vibrant[3],
+                    "label": "Greedy: Criticality",
+                },
+                "GreedyMultiCriteria": {
+                    "color": tc.vibrant[4],
+                    "label": "Greedy: Multi-Criteria",
+                },
+                "ibDpCqi": {"color": tc.dark[0], "label": "ib DP: CQI"},
+                "ibDpBufferLevel": {
+                    "color": tc.dark[1],
+                    "label": "ib DP: Buffer Level",
+                },
+                "ibDpPropFairness": {
+                    "color": tc.dark[2],
+                    "label": "ib DP: Prop. Fairn.",
+                },
+                "ibDpCriticality": {"color": tc.dark[3], "label": "ib DP: Criticality"},
+                "ibDpMultiCriteria": {
+                    "color": tc.dark[4],
+                    "label": "ib DP: Multi-Criteria",
+                },
+                "DpCqi": {"color": tc.dark[0], "label": "DP: CQI"},
+                "DpBufferLevel": {"color": tc.dark[1], "label": "DP: Buffer Level"},
+                "DpPropFairness": {"color": tc.dark[2], "label": "DP: Prop. Fairn."},
+                "DpCriticality": {"color": tc.dark[3], "label": "DP: Criticality"},
+                "DpMultiCriteria": {"color": tc.dark[4], "label": "DP: Multi-Criteria"},
             },
-            "ibTopKPropFairness": {
-                "color": tc.light[2],
-                "label": "IB Top-K: Prop. Fairn.",
+            "xapp_algo_rbg_bounding": {
+                "Bypass": {"color": tc.muted[0], "label": "Bypass"},
+                "Clamp": {"color": tc.muted[2], "label": "Clamp"},
+                "ibLearningPPO": {"color": tc.muted[7], "label": "ib PPO"},
+                "LearningPPO": {"color": tc.muted[7], "label": "PPO"},
             },
-            "ibTopKCriticality": {
-                "color": tc.light[3],
-                "label": "IB Top-K: Criticality",
-            },
-            "ibTopKMultiCriteria": {
-                "color": tc.light[4],
-                "label": "IB Top-K: Multi-Criteria",
-            },
-            "TopKCqi": {"color": tc.light[0], "label": "Top-K: CQI"},
-            "TopKBufferLevel": {"color": tc.light[1], "label": "Top-K: Buffer Level"},
-            "TopKPropFairness": {"color": tc.light[2], "label": "Top-K: Prop. Fairn."},
-            "TopKCriticality": {"color": tc.light[3], "label": "Top-K: Criticality"},
-            "TopKMultiCriteria": {
-                "color": tc.light[4],
-                "label": "Top-K: Multi-Criteria",
-            },
-            "ibGreedyCqi": {"color": tc.vibrant[0], "label": "IB Greedy: CQI"},
-            "ibGreedyBufferLevel": {
-                "color": tc.vibrant[1],
-                "label": "IB Greedy: Buffer Level",
-            },
-            "ibGreedyPropFairness": {
-                "color": tc.vibrant[2],
-                "label": "IB Greedy: Prop. Fairn.",
-            },
-            "ibGreedyCriticality": {
-                "color": tc.vibrant[3],
-                "label": "IB Greedy: Criticality",
-            },
-            "ibGreedyMultiCriteria": {
-                "color": tc.vibrant[4],
-                "label": "IB Greedy: Multi-Criteria",
-            },
-            "GreedyCqi": {"color": tc.vibrant[0], "label": "Greedy: CQI"},
-            "GreedyBufferLevel": {
-                "color": tc.vibrant[1],
-                "label": "Greedy: Buffer Level",
-            },
-            "GreedyPropFairness": {
-                "color": tc.vibrant[2],
-                "label": "Greedy: Prop. Fairn.",
-            },
-            "GreedyCriticality": {
-                "color": tc.vibrant[3],
-                "label": "Greedy: Criticality",
-            },
-            "GreedyMultiCriteria": {
-                "color": tc.vibrant[4],
-                "label": "Greedy: Multi-Criteria",
-            },
-            "ibDpCqi": {"color": tc.dark[0], "label": "IB DP: CQI"},
-            "ibDpBufferLevel": {"color": tc.dark[1], "label": "IB DP: Buffer Level"},
-            "ibDpPropFairness": {"color": tc.dark[2], "label": "IB DP: Prop. Fairn."},
-            "ibDpCriticality": {"color": tc.dark[3], "label": "IB DP: Criticality"},
-            "ibDpMultiCriteria": {
-                "color": tc.dark[4],
-                "label": "IB DP: Multi-Criteria",
-            },
-            "DpCqi": {"color": tc.dark[0], "label": "DP: CQI"},
-            "DpBufferLevel": {"color": tc.dark[1], "label": "DP: Buffer Level"},
-            "DpPropFairness": {"color": tc.dark[2], "label": "DP: Prop. Fairn."},
-            "DpCriticality": {"color": tc.dark[3], "label": "DP: Criticality"},
-            "DpMultiCriteria": {"color": tc.dark[4], "label": "DP: Multi-Criteria"},
-            "Bypass": {"color": tc.pale[0], "label": "Bypass"},
         }
         self.big_fontsize = 15
         self.small_fontsize = 13

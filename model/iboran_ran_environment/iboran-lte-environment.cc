@@ -181,6 +181,9 @@ main(int argc, char* argv[])
     auto& commonParams = params.GetCommonRanParams();
     auto& lteParams = params.GetLteParams();
 
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(commonParams.rngRun);
+
     // -- LTE AND EPC INITIALIZATION --------------------------------------------
     /**
      * Topology:

@@ -14,6 +14,7 @@ Complete, step-by-step instructions for building ib-ORAN on top of ns-3.
 3. [Testing](#testing)
    - [Parameters](#parameters)
    - [Examples](#examples)
+   - [Reproducibility](#reproducibility)
 4. [Python Dependencies Note](#python-dependencies-note)
 
 
@@ -108,38 +109,45 @@ bash quick-setup.sh
 
 ## Testing
 
+Run from `contrib/iboran/model/iboran_campaign`:
+
 ```bash
 python3 iboran_run.py [--rat_type RAT_TYPE] [--k K] [--dapp_algo_ue_selection ALGO] ...
 ```
 
-All parameters are optional. If omitted, default values are used.
+> All parameters are optional. An omitted parameter takes its value from [`iboranConfig.yaml`](/model/iboran_campaign/iboranConfig.yaml). The run writes the merged configuration to `/notebook/logs/runConfig.yaml`, which the ns-3 environment reads.
 
-### Parameters:
+### Parameters
 
-| Parameter | Description | Default |
+| Parameter | Description | Config key |
 |---|---|---|
-| `--rat_type` | Radio Access Technology: `"LTE"` or `"NR"` | `"LTE"` |
-| `--k` | Maximum parallel UEs scheduled per TTI/slot | `1` |
-| `--dapp_control_period_sf` | dApp control period (in subframes) | `1` |
-| `--xapp_control_period_f` | xApp control period (in frames) | `1` |
-| `--dapp_algo_ue_selection` | dApp MAC scheduling algorithm (see the [Built-In Algorithms](/doc/built-in-algos.md)) | `"Random"` |
-| `--xapp_algo_rbg_bounding` | xApp RBG bounding algorithm (see the [Built-In Algorithms](/doc/built-in-algos.md)) | `"Bypass"` |
-| `--dataset_id` | Identifier of the dataset: `"toy"` or `"market-1501"` | `"toy"` |
-| `--data_format` | Application data format: `"IMAGE"`, `"VIDEO"`, `"EMBEDDING"`, or `"TEXT"` | `"IMAGE"` |
-| `--embedder` | Embedding extraction model: `"TransReID"` or `"CLIP"` | `"TransReID"` |
-| `--oid_range` | Range of object IDs for intent generation (format: `low,high`) | `1,2` |
-| `--save_dapp_log` | Save dApp control log to file: `true` or `false` | `false` |
-| `--verbose` | Print statistics and KPIs' summary to console: `true` or `false` | `true` |
+| `--rat_type` | Radio Access Technology: `"LTE"` or `"NR"` | `rat_type` |
+| `--rng_run` | Replication index (≥ 1): ns-3 `RngRun` and seed of every other random generator (see [Reproducibility](#reproducibility)) | `common.rngRun` |
+| `--k` | Maximum parallel UEs scheduled per TTI/slot | `orchestrator.k` |
+| `--dapp_control_period_sf` | dApp control period (in subframes) | `orchestrator.dapp_control_period_sf` |
+| `--xapp_control_period_f` | xApp control period (in frames) | `orchestrator.xapp_control_period_f` |
+| `--dapp_algo_ue_selection` | dApp MAC scheduling algorithm (see the [Built-In Algorithms](/doc/built-in-algos.md)) | `orchestrator.dapp_algo_ue_selection` |
+| `--xapp_algo_rbg_bounding` | xApp RBG bounding algorithm (see the [Built-In Algorithms](/doc/built-in-algos.md)) | `orchestrator.xapp_algo_rbg_bounding` |
+| `--dataset_id` | Identifier of the dataset: `"toy"` or `"market-1501"` | `orchestrator.dataset_id` |
+| `--data_format` | Application data format: `"IMAGE"`, `"VIDEO"`, `"EMBEDDING"`, or `"TEXT"` | `orchestrator.data_format` |
+| `--embedder` | Embedding extraction model: `"TransReID"` or `"CLIP"` | `orchestrator.embedder` |
+| `--oid_range` | Range of object IDs for intent generation (format: `low,high`) | `orchestrator.oid_range` |
+| `--save_dapp_log` | Save dApp control log to file: `true` or `false` | `orchestrator.save_dapp_log` |
+| `--verbose` | Print statistics and KPIs' summary to console: `true` or `false` | `orchestrator.verbose` |
 
-### Examples:
+### Examples
 
 ```bash
-# Run with all defaults
+# Run with the configuration file values
 python3 iboran_run.py
 
-# NR with Intent-Based Top-k CQI scheduler, k=3, rest set as default
-python3 iboran_run.py --rat_type="NR" --k=3 --dapp_algo_ue_selection="ibTopKCqi"
+# NR with Intent-Based Top-k CQI scheduler, k=3, replication 5
+python3 iboran_run.py --rat_type="NR" --k=3 --dapp_algo_ue_selection="ibTopKCqi" --rng_run=5
 ```
+
+### Reproducibility
+
+`--rng_run` fixes one replication. Two runs with the same parameters and the same `--rng_run` give identical results. Every random element derives from it: the ns-3 random variable streams, the assignment of object IDs to UEs, the produced intents, and the Random scheduler. Runs of different algorithms with the same `--rng_run` share the same channel and traffic realization, which allows paired comparisons. `IbOranCampaign` uses `--rng_run = mc_idx + 1` for Monte Carlo iteration `mc_idx`.
 
 
 ## Python Dependencies Note

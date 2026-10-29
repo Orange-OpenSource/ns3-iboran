@@ -14,6 +14,8 @@
 #define IBORAN_LTE_MAC_SCHEDULER_H
 
 #include "../iboran_interfaces/iboran-shm-structure.h"
+#include "iboran-throughput-tracker.h"
+#include "iboran-waiting-time-tracker.h"
 
 #include "ns3/ff-mac-csched-sap.h"
 #include "ns3/ff-mac-sched-sap.h"
@@ -423,10 +425,16 @@ class IbOranLteMacScheduler : public FfMacScheduler
     // Per-UE tracking
     std::map<uint16_t, uint32_t> m_ueDlTotalBytesServed;
     std::map<uint16_t, uint32_t> m_ueUlTotalBytesServed;
-    std::map<uint16_t, uint8_t> m_ueDlAllocatedRb;
-    std::map<uint16_t, uint8_t> m_ueUlAllocatedRb;
     std::map<uint16_t, uint16_t> m_ueDlMaxRbgAllocation;
     std::map<uint16_t, uint16_t> m_ueUlMaxRbgAllocation;
+
+    // Throughput tracking
+    ThroughputTracker m_dlTput{100.0};
+    ThroughputTracker m_ulTput{100.0};
+
+    // Waiting time tracking
+    WaitingTimeTracker m_dlWaiting;
+    WaitingTimeTracker m_ulWaiting;
 };
 
 } // namespace ns3

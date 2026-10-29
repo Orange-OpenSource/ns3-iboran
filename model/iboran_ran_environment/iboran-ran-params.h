@@ -63,6 +63,8 @@ struct CommonRanParams
 
     bool enableIbOranSchedCoreLog; // enable ib-ORAN MAC scheduler core logging
     bool enableRrcLog;             // enable RRC logging
+
+    uint32_t rngRun; // ns-3 RngRun and application RNG seed
 };
 
 // == LTE PARAMETERS ============================================================
