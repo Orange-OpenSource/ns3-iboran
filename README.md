@@ -10,17 +10,6 @@ The apps follow the three Open RAN control loops. At the O-DU, dApps act in real
 
 LTE is simulated with an adapted version of the ns-3 `lte` module, and 5G NR with the [5G-LENA](https://gitlab.com/cttc-lena/nr) `nr` module.
 
-## Table of contents
-
-- [Architecture](#architecture)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [Citation](#citation)
-- [Acknowledgement](#acknowledgement)
-- [License](#license)
-
 ## Architecture
 
 <div align="center">

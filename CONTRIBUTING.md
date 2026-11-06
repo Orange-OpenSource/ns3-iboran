@@ -2,18 +2,6 @@
 
 ib-ORAN is an open research project, and contributions are welcome: new apps, scheduling algorithms, bug fixes and documentation. This document describes how to contribute. Everyone taking part in the project follows the [code of conduct](.github/CODE_OF_CONDUCT.md). Paths are relative to `contrib/iboran`.
 
-## Table of contents
-
-- [Questions and bug reports](#questions-and-bug-reports)
-- [Pull requests](#pull-requests)
-- [Testing your changes](#testing-your-changes)
-- [Code style](#code-style)
-- [File headers](#file-headers)
-- [Adding an app](#adding-an-app)
-- [Adding an algorithm](#adding-an-algorithm)
-- [Documentation](#documentation)
-- [Credits](#credits)
-
 ## Questions and bug reports
 
 Ask questions in [Discussions](https://github.com/Orange-OpenSource/ns3-iboran/discussions), not in Issues. Report bugs and request features in [Issues](https://github.com/Orange-OpenSource/ns3-iboran/issues). Check existing issues before opening a new one.
