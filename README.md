@@ -25,7 +25,7 @@ The Near-RT RIC uses the E2 service models E2SM-KPM, E2SM-RC and E2SM-DAPP, the 
 
 ## Installation
 
-ib-ORAN builds as an ns-3 contrib module. It requires [ns-3](https://gitlab.com/nsnam/ns-3-dev) 3.48 or later, [ns3-ai](https://github.com/hust-diangroup/ns3-ai) 1.2.0, [5G-LENA nr](https://gitlab.com/cttc-lena/nr) 4.2 or later, and Python 3.11 or later. The full list of prerequisites and the step-by-step procedure are in [installation](doc/installation.md).
+ib-ORAN builds as an ns-3 contrib module. It requires [ns-3](https://gitlab.com/nsnam/ns-3-dev) 3.48, [ns3-ai](https://github.com/hust-diangroup/ns3-ai) 1.2.0, [5G-LENA nr](https://gitlab.com/cttc-lena/nr) 4.2, and Python 3.11 or later. The full list of prerequisites and the step-by-step procedure are in [installation](doc/installation.md).
 
 Clone ns-3 and the three contrib modules:
 
@@ -107,7 +107,7 @@ If you use ib-ORAN in your research, cite the following paper:
 
 ```bibtex
 @inproceedings{agheli2026iboran,
-  author        = {Agheli, Pouya and Lefebvre, Grégoire},
+  author        = {Agheli, Pouya and Lefebvre, Gr{\'e}goire},
   title         = {Intent-Based Orchestration in Open RAN: An ns-3 Simulation Framework},
   booktitle     = {European Conference on Networks and Communications (EuCNC)},
   year          = {2026},
@@ -121,7 +121,7 @@ To cite the software itself:
 
 ```bibtex
 @software{iboran,
-  author  = {Agheli, Pouya and Lefebvre, Grégoire},
+  author  = {Agheli, Pouya and Lefebvre, Gr{\'e}goire},
   title   = {ib-ORAN: Intent-Based Open RAN},
   year    = {2026},
   url     = {https://github.com/Orange-OpenSource/ns3-iboran},

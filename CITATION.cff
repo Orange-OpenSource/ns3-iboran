@@ -6,7 +6,7 @@ authors:
   - family-names: Agheli
     given-names: Pouya
   - family-names: Lefebvre
-    given-names: Grégoire
+    given-names: Gr{\'e}goire
 license: MIT
 repository-code: "https://github.com/Orange-OpenSource/ns3-iboran"
 version: 2.2.0
@@ -17,7 +17,7 @@ preferred-citation:
     - family-names: Agheli
       given-names: Pouya
     - family-names: Lefebvre
-      given-names: Grégoire
+      given-names: Gr{\'e}goire
   title: "Intent-Based Orchestration in Open RAN: An ns-3 Simulation Framework"
   conference:
     name: "European Conference on Networks and Communications (EuCNC)"
