@@ -21,6 +21,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - Broken links and anchors in the README, `CONTRIBUTING.md` and `doc/`.
 - Documentation errors: `nr` listed as required for both RATs, `yaml-cpp` added to the prerequisites, and the per-UE RBG bound of E2SM-RC and E2SM-DAPP given in RBGs instead of PRBs.
+- `quick-setup.sh`: CMake check raised to 3.25+ as required by ns-3.48, Protocol Buffers version check corrected, ns3-ai `python_utils` path fixed, and shebang moved to the first line.
 
 
 ## 2.2.0 (2026-10-29)

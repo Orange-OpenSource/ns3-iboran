@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Software Name: ib-ORAN
 # SPDX-FileCopyrightText: Copyright (c) Orange SA
 # SPDX-License-Identifier: MIT
@@ -7,8 +9,6 @@
 # or https://spdx.org/licenses/MIT.html
 #
 # Authors: see CONTRIBUTORS.md
-
-#!/bin/bash
 
 set -e  # exit on error
 
@@ -62,7 +62,7 @@ else
 fi
 
 
-# check CMake 3.10+
+# check CMake 3.25+ (required by ns-3.48)
 if ! command -v cmake &> /dev/null; then
     echo -e "${RED}✗ CMake not found${NC}"
     CHECK_FAILED=1
@@ -71,8 +71,8 @@ else
     CMAKE_MAJOR=$(echo $CMAKE_VERSION | cut -d. -f1)
     CMAKE_MINOR=$(echo $CMAKE_VERSION | cut -d. -f2)
     
-    if [ "$CMAKE_MAJOR" -lt 3 ] || ([ "$CMAKE_MAJOR" -eq 3 ] && [ "$CMAKE_MINOR" -lt 10 ]); then
-        echo -e "${RED}✗ CMake 3.10+ required, found: $CMAKE_VERSION${NC}"
+    if [ "$CMAKE_MAJOR" -lt 3 ] || ([ "$CMAKE_MAJOR" -eq 3 ] && [ "$CMAKE_MINOR" -lt 25 ]); then
+        echo -e "${RED}✗ CMake 3.25+ required, found: $CMAKE_VERSION${NC}"
         CHECK_FAILED=1
     else
         echo -e "${GREEN}✓ CMake $CMAKE_VERSION found${NC}"
@@ -183,22 +183,23 @@ fi
 
 
 # check Protocol Buffers 6.33.0+
+# since protobuf 22, protoc reports its own version (e.g. "libprotoc 33.0" for 6.33)
 if ! command -v protoc &> /dev/null; then
     echo -e "${RED}✗ Protocol Buffers (protoc) not found${NC}"
     echo -e "${YELLOW}  Install: sudo apt install protobuf-compiler libprotobuf-dev (Ubuntu/Debian)${NC}"
     echo -e "${YELLOW}          brew install protobuf (macOS)${NC}"
     CHECK_FAILED=1
 else
-    PROTOC_VERSION=$(protoc --version | grep -oE '[0-9]+\.[0-9]+')
+    PROTOC_VERSION=$(protoc --version | grep -oE '[0-9]+\.[0-9]+' | head -n1)
     PROTOC_MAJOR=$(echo $PROTOC_VERSION | cut -d. -f1)
-    PROTOC_MINOR=$(echo $PROTOC_VERSION | cut -d. -f2)
-    
-    if [ "$PROTOC_MAJOR" -lt 6 ] || ([ "$PROTOC_MAJOR" -eq 6 ] && [ "$PROTOC_MINOR" -lt 33 ]); then
-        echo -e "${RED}✗ Protocol Buffers 6.33.0+ required, found: $PROTOC_VERSION${NC}"
+    PROTOC_MAJOR=${PROTOC_MAJOR:-0}
+
+    if [ "$PROTOC_MAJOR" -lt 33 ]; then
+        echo -e "${RED}✗ Protocol Buffers 6.33.0+ (protoc 33.0+) required, found: protoc $PROTOC_VERSION${NC}"
         CHECK_FAILED=1
     else
-        echo -e "${GREEN}✓ Protocol Buffers $PROTOC_VERSION found${NC}"
-    fi 
+        echo -e "${GREEN}✓ Protocol Buffers found: protoc $PROTOC_VERSION${NC}"
+    fi
 fi
 
 
@@ -333,8 +334,8 @@ python3 -c "import ns3ai_utils" 2>/dev/null && {
     echo -e "${GREEN}✓ ns3ai_utils already installed${NC}"
 } || {
     echo "Installing ns3ai_utils..."
-    if [ -d "../../python_utils" ]; then
-        pip install -e ../../python_utils/
+    if [ -d "../ai/python_utils" ]; then
+        pip install -e ../ai/python_utils/
         echo -e "${GREEN}✓ ns3ai_utils installed${NC}"
     else
         echo -e "${RED}✗ Warning: contrib/ai/python_utils not found${NC}"
@@ -389,9 +390,7 @@ echo "Configuring ns-3..."
 ./ns3 configure --enable-examples --enable-tests
 
 echo "Building iboran..."
-./ns3 build iboran
-
-if [ $? -eq 0 ]; then
+if ./ns3 build iboran; then
     echo -e "${GREEN}✓ Build successful${NC}"
 else
     echo -e "${RED}✗ Build failed${NC}"

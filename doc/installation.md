@@ -6,12 +6,12 @@ This document describes how to build ib-ORAN on top of ns-3 and verify the insta
 
 | Dependency | Version |
 |---|---|
-| [ns-3](https://gitlab.com/nsnam/ns-3-dev) | 3.48+ |
-| [ns3-ai](https://github.com/hust-diangroup/ns3-ai/blob/main/docs/install.md) | 1.2.0 |
-| [5G-LENA nr](https://gitlab.com/cttc-lena/nr) | 4.2+ |
+| [ns-3](https://gitlab.com/nsnam/ns-3-dev) | 3.48 |
+| [ns3-ai](https://github.com/hust-diangroup/ns3-ai/blob/main/docs/install.md) | 1.2 |
+| [5G-LENA nr](https://gitlab.com/cttc-lena/nr) | 5.0 |
 | Python | 3.11+ |
 | g++ or clang++ | 11.1+ or 17.0+ |
-| CMake | 3.10+ |
+| CMake | 3.25+ |
 | Boost C++ libraries | 1.89+ |
 | Protocol Buffers | 6.33.0+ |
 | pybind11 | 3.0+ |
