@@ -7,6 +7,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## 2.2.1 (2026-11-06)
+
+### Added
+- Code of conduct (`.github/CODE_OF_CONDUCT.md`, Contributor Covenant 2.0) and security policy (`.github/SECURITY.md`).
+- `doc/usage.md`, `doc/kpis.md` and `doc/visualization.md`.
+
+### Changed
+- README restructured into architecture, installation, usage, documentation, contributing and citation sections.
+- Documentation reorganized: `install-and-test.md` split into `installation.md` and `usage.md`, `app-catalog.md` renamed to `apps.md`, `built-in-algos.md` to `algorithms.md` and `message-structure.md` to `service-models.md`, and KPI definitions moved from `simulation-data.md` to `kpis.md`.
+- `CONTRIBUTING.md` rewritten with testing steps, file headers, guides for adding apps and algorithms, and documentation conventions.
+
+### Fixed
+- Broken links and anchors in the README, `CONTRIBUTING.md` and `doc/`.
+- Documentation errors: `nr` listed as required for both RATs, `yaml-cpp` added to the prerequisites, and the per-UE RBG bound of E2SM-RC and E2SM-DAPP given in RBGs instead of PRBs.
+
+
 ## 2.2.0 (2026-10-29)
 
 ### Added

@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use ib-ORAN in your research, please cite the paper below."
+title: "ib-ORAN: Intent-Based Open RAN"
+type: software
+authors:
+  - family-names: Agheli
+    given-names: Pouya
+  - family-names: Lefebvre
+    given-names: Grégoire
+license: MIT
+repository-code: "https://github.com/Orange-OpenSource/ns3-iboran"
+version: 2.2.0
+date-released: 2026-10-29
+preferred-citation:
+  type: conference-paper
+  authors:
+    - family-names: Agheli
+      given-names: Pouya
+    - family-names: Lefebvre
+      given-names: Grégoire
+  title: "Intent-Based Orchestration in Open RAN: An ns-3 Simulation Framework"
+  conference:
+    name: "European Conference on Networks and Communications (EuCNC)"
+  year: 2026
+  url: "https://ieeexplore.ieee.org/document/11577276"
+  identifiers:
+    - type: other
+      value: "arXiv:2605.30079"

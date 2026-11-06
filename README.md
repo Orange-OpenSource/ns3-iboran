@@ -1,172 +1,149 @@
 # ib-ORAN: Intent-Based Open RAN
 
-An ns-3-based Open RAN simulation environment with native support for intent-based orchestration.
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://spdx.org/licenses/MIT.html)
-[![ns-3](https://img.shields.io/badge/ns--3-compatible-brightgreen)](https://www.nsnam.org)
+[![ns-3](https://img.shields.io/badge/ns--3-3.48%2B-brightgreen)](https://www.nsnam.org)
 [![RAT](https://img.shields.io/badge/RAT-LTE%20%7C%20NR-orange)](https://www.3gpp.org/)
-<!-- [![ANR COMSEMA](https://img.shields.io/badge/Funded%20by-ANR%20COMSEMA-blueviolet)](https://sites.google.com/view/anrcomsema) -->
 
+ib-ORAN (`ns3-iboran`) is an [ns-3](https://www.nsnam.org) module for testing intent-based orchestration in Open RAN. You write the control logic in Python as Open RAN apps, and ib-ORAN runs it against a simulated LTE or 5G NR network. Alongside standard KPIs, it reports how well the expressed intent on each link is satisfied.
 
-## License
+The apps follow the three Open RAN control loops. At the O-DU, dApps act in real time below 10 ms, and in the Near-RT RIC, xApps act between 10 ms and 1 s. rApps in the Non-RT RIC, which act above 1 s, are planned.
 
-The original contributions in this repository are licensed under the [MIT License](https://spdx.org/licenses/MIT.html).
+LTE is simulated with an adapted version of the ns-3 `lte` module, and 5G NR with the [5G-LENA](https://gitlab.com/cttc-lena/nr) `nr` module.
 
-> This means you are free to use, modify, and distribute this software, with or without modification, provided you retain the original copyright notice. See the [`LICENSE`](/LICENSE) file for the full terms.
+## Table of contents
 
-### Third-Party Components
-
-This project makes use of third-party open-source components. Their copyright notices and license terms are preserved in their respective directories and summarized in [`THIRD-PARTY.txt`](THIRD-PARTY.txt). Do not remove or modify the license and copyright files present in any third-party component directory.
-
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [Configuration](#configuration)
-4. [Getting Started](#getting-started)
-5. [Troubleshooting](#troubleshooting)
-6. [Contributing](#contributing)
-7. [Acknowledgements](#acknowledgements)
-8. [Further Reading](#further-reading)
-
-
-## Overview
-
-ib-ORAN (module name: `ns3-iboran`) is a comprehensive simulation environment and design framework built on the proven [ns-3](https://www.nsnam.org) network simulator. It is primarily developed to implement and verify intent-based operations within Open RAN architectures.
-
-This framework enables direct control of Physical Layer (PHY) and Medium Access Control (MAC) functions through RAN applications — rApps and xApps hosted on RAN Intelligent Controllers (RICs), as well as distributed dApps — spanning the full spectrum of control timescales from non-real-time (non-RT) to near-real-time (near-RT) to real-time.
-
-ib-ORAN bridges high-performance ns-3 C++ simulations and Python-based policy logic via a shared-memory interface, decoupling the simulation engine from the control plane without sacrificing performance. This architecture natively supports non-RT and near-RT RIC implementations alongside real-time dApp design, enabling intent-based, semantics-aware exchange of payload data across diverse use cases.
-
-Building on the foundations of [ns3-gym](https://github.com/tkn-tub/ns3-gym) and [ns3-ai](https://github.com/hust-diangroup/ns3-ai), ib-ORAN extends both frameworks with intent-based and semantics-aware capabilities purpose-built for Open RAN network control — going beyond reinforcement learning hooks to provide a full orchestration layer for intelligent, policy-driven RAN behavior.
-
-ib-ORAN supports both 3GPP LTE and New Radio (NR) standards:
-- **LTE**: implemented through an adapted version of the built-in `lte` module in ns-3.
-- **NR**: built on top of the [ns-3 nr](https://gitlab.com/cttc-lena/nr) module.
-
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [Citation](#citation)
+- [Acknowledgement](#acknowledgement)
+- [License](#license)
 
 ## Architecture
 
 <div align="center">
-  <img src="./doc/architecture.png" alt="ib-ORAN Architecture" width="65%"/>
+  <img src="doc/architecture.png" alt="ib-ORAN architecture" width="65%"/>
 </div>
 
-The architecture spans three control planes — non-RT RIC, near-RT RIC, and real-time dApp — interconnected via the standardized E2 and A1 interfaces, plus the newly introduced E3 interface, which is not yet standardized. The shared-memory bridge between ns-3 and the Python orchestration layer is a core design principle, enabling clean separation of simulation logic from intelligent control.
+ib-ORAN separates the network simulation from the control logic. On one side, the network simulator, written in C++ on top of ns-3, contains the RAN functions and the E2 and E3 agents that expose them. On the other side, the dApps, the Near-RT RIC with its xApps, and the Non-RT RIC with its rApps run in Python and reach those agents through the shared-memory interface of [ns3-ai](https://github.com/hust-diangroup/ns3-ai).
 
-Concretely, A1 carries policy guidance from the non-RT RIC's rApps to the near-RT RIC's xApps; E2 connects the near-RT RIC to the O-DU (ns-3 RAN), carrying KPM reports, RIC control, and dApp-related messages; and E3 connects the dApp to the MAC/RLC layers, enabling sub-10ms local control at the O-DU. 
+The Near-RT RIC uses the E2 service models E2SM-KPM, E2SM-RC and E2SM-DAPP, the dApps use the E3 service model (E3SM), and the two RICs communicate over A1. The E2-E3 bridge relays E2SM-DAPP messages between the Near-RT RIC and the dApps. The fields of each message are listed in [service models](doc/service-models.md).
 
-### Message Structures
+> [!NOTE]
+> E3 and E2SM-DAPP are not yet standardized. The other interfaces and service models follow the O-RAN Alliance specifications.
 
-See the [`message-structure.md`](/doc/message-structure.md) for the complete lists of control messages by service model exchanged over the implemented interfaces.
+## Installation
 
-### App Inventory (dApp / xApp / rApp)
+ib-ORAN builds as an ns-3 contrib module. It requires [ns-3](https://gitlab.com/nsnam/ns-3-dev) 3.48 or later, [ns3-ai](https://github.com/hust-diangroup/ns3-ai) 1.2.0, [5G-LENA nr](https://gitlab.com/cttc-lena/nr) 4.2 or later, and Python 3.11 or later. The full list of prerequisites and the step-by-step procedure are in [installation](doc/installation.md).
 
-Browse the [`app-catalog.md`](/doc/app-catalog.md) for the full list of developed dApps, xApps, and rApps. To contribute a new app or algorithm, refer to the [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Clone ns-3 and the three contrib modules:
 
-
-## Configuration
-
-### Simulation Data
-
-- Browse the [`simulation-data.md`](/doc/simulation-data.md) for the full details of simulator input and output data, plus the supporting datasets and embedding extraction methods.
-- Default simulation configuration parameters are defined in [`iboranConfig.yaml`](/model/iboran_campaign/iboranConfig.yaml).
-
-### Intent Production
-
-ib-ORAN produces intents as sets of object IDs — one set per link direction — requested by, or of interest to, a network operator. The default intent production method is:
-
-- **Pseudo-Random** — samples a fixed number of object IDs per link direction uniformly at random from `--oid_range`, seeded by `--rng_run` for reproducibility.
-
-> **Note:** More advanced intent production methods (specifying object IDs directly instead of sampling them) are currently under development.
-
-
-## Getting Started
-
-### Installation and Testing
-
-A structured installation and testing guide is available in the [`install-and-test.md`](/doc/install-and-test.md).
-
-### Performance Evaluation
-
-Beyond single runs, the [`iboran_campaign.py`](/model/iboran_campaign/iboran_campaign.py) script facilitates large-scale evaluation by sweeping over different parameters and algorithms. This makes it easy to compare RAN operation strategies from multiple perspectives using interactive computing platforms (e.g., Jupyter Notebook).
-
-See [`iboran_evaluation.ipynb`](/notebook/iboran_evaluation.ipynb) for an illustrative example showing how to set up comparisons across key parameters and scheduling algorithms.
-
-### Visualization via NetAnim
-
-ib-ORAN automatically generates an XML animation file compatible with [NetAnim](https://www.nsnam.org/wiki/NetAnim), enabling graphical visualization of nodes, packet transmissions, and mobility patterns.
-
-#### Step 1: Clone and Build NetAnim
-
-```bash
-cd /path/to/ns-3
-git clone https://gitlab.com/nsnam/netanim.git
-cd netanim
-mkdir build && cd build
-cmake .. && cmake --build .
+```shell
+git clone https://gitlab.com/nsnam/ns-3-dev.git ns-3
+cd ns-3
+git clone https://github.com/hust-diangroup/ns3-ai.git contrib/ai
+git clone https://gitlab.com/cttc-lena/nr.git contrib/nr
+git clone https://github.com/Orange-OpenSource/ns3-iboran.git contrib/iboran
 ```
 
-#### Step 2: Launch NetAnim
+Create a Python virtual environment in the ns-3 root and install the ns3-ai Python interfaces:
 
-```bash
-cd build
-./netanim
-```
-
-To display the animation, launch the generated XML file (`iboran-lte-anim.xml` or `iboran-nr-anim.xml`) from `iboran/notebook/netanim/`.
-
-
-## Troubleshooting
-
-### Python Module Import Errors
-
-Verify that Python dependencies are installed in the correct environment:
-
-```bash
+```shell
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e contrib/ai/python_utils
 pip install -e contrib/ai/model/gym-interface/py
 ```
 
-### Common Issues
+Configure and build ns-3 with all contrib modules:
 
-If you encounter further issues, please check the existing [GitHub Issues](../../issues) before opening a new one. When reporting a bug, include your ns-3 version, Python version, OS, and the full error output.
+```shell
+./ns3 configure --enable-examples --enable-tests
+./ns3 build
+```
 
+Run the setup script, which installs the Python dependencies of ib-ORAN into the virtual environment, rebuilds the module and verifies the installation:
+
+```shell
+cd contrib/iboran
+bash quick-setup.sh
+```
+
+## Usage
+
+The parameters, campaigns, and reproducibility are described in [usage](doc/usage.md).
+
+### Single run
+
+A single simulation runs from `model/iboran_campaign`:
+
+```shell
+cd contrib/iboran/model/iboran_campaign
+python3 iboran_run.py --rat_type="NR" --k=3 --dapp_algo_ue_selection="ibTopKCqi"
+```
+
+Parameters omitted on the command line take their values from [`iboranConfig.yaml`](model/iboran_campaign/iboranConfig.yaml). The full parameter list is in [usage](doc/usage.md#parameters).
+
+### Campaign
+
+For larger evaluations, [`iboran_campaign.py`](model/iboran_campaign/iboran_campaign.py) sweeps parameters and control algorithms over Monte Carlo replications. The notebook [`iboran_evaluation.ipynb`](notebook/iboran_evaluation.ipynb) sets up a campaign and compares scheduling algorithms.
+
+Each run writes its [KPIs](doc/kpis.md), logs and a NetAnim animation file to `notebook/`. See [simulation data](doc/simulation-data.md) and [visualization](doc/visualization.md).
+
+## Documentation
+
+| Document | Content |
+|---|---|
+| [Installation](doc/installation.md) | Prerequisites, installation steps and troubleshooting |
+| [Usage](doc/usage.md) | Run parameters, examples, campaigns, and reproducibility |
+| [Apps](doc/apps.md) | Implemented dApps, xApps and rApps |
+| [Algorithms](doc/algorithms.md) | dApp UE selection and xApp RBG bounding algorithms |
+| [Service models](doc/service-models.md) | Message fields of each E2 and E3 service model |
+| [Simulation data](doc/simulation-data.md) | Payload formats, datasets, embedding models and run outputs |
+| [KPIs](doc/kpis.md) | Standard, intent-based and control KPIs |
+| [Visualization](doc/visualization.md) | Viewing runs in NetAnim |
+| [Changelog](CHANGELOG.md) | Changes in each release |
 
 ## Contributing
 
-Contributions are welcome — new algorithms, apps, datasets, and fixes alike. Read the [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request, and check the existing issues first to avoid duplicate work.
+Ask questions in [Discussions](https://github.com/Orange-OpenSource/ns3-iboran/discussions) and report bugs in [Issues](https://github.com/Orange-OpenSource/ns3-iboran/issues). Check existing issues before opening a new one. A bug report should state the ib-ORAN commit or release, the ns-3, ns3-ai, nr and Python versions, the OS and compiler, the command that failed and its full error output.
 
+Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening one. Everyone taking part in the project follows the [code of conduct](.github/CODE_OF_CONDUCT.md). A new dApp, xApp, rApp or algorithm must also be listed in [apps](doc/apps.md) or [algorithms](doc/algorithms.md).
 
-## Acknowledgements
+## Citation
 
-### Funding
-
-ib-ORAN is part of the ANR COMSEMA project, supported by the French National Research Agency.
-
-### Citation
-
-If you use ib-ORAN in your research, please cite this repository:
+If you use ib-ORAN in your research, cite the following paper:
 
 ```bibtex
-@software{iboran,
-  author    = {Agheli, Pouya and Lefebvre, Grégoire},
-  title     = {ib-ORAN: Intent-Based Open RAN},
-  year      = {2026},
-  url       = {https://github.com/Orange-OpenSource/ns3-iboran},
-  license   = {MIT}
+@inproceedings{agheli2026iboran,
+  author        = {Agheli, Pouya and Lefebvre, Grégoire},
+  title         = {Intent-Based Orchestration in Open RAN: An ns-3 Simulation Framework},
+  booktitle     = {European Conference on Networks and Communications (EuCNC)},
+  year          = {2026},
+  url           = {https://ieeexplore.ieee.org/document/11577276},
+  eprint        = {2605.30079},
+  archivePrefix = {arXiv}
 }
 ```
 
-Or the corresponding publication available at [IEEE Xplore](https://ieeexplore.ieee.org/document/11577276) and [arXiv](https://arxiv.org/abs/2605.30079).
+To cite the software itself:
 
+```bibtex
+@software{iboran,
+  author  = {Agheli, Pouya and Lefebvre, Grégoire},
+  title   = {ib-ORAN: Intent-Based Open RAN},
+  year    = {2026},
+  url     = {https://github.com/Orange-OpenSource/ns3-iboran},
+  license = {MIT}
+}
+```
 
-## Further Reading
+## Acknowledgement
 
-- [ns-3 LTE Scheduler Documentation](https://www.nsnam.org/docs/models/html/lte-design.html#mac-scheduler)
-- [ns-3 LTE Design Overview](https://www.nsnam.org/docs/models/html/lte-design.html)
-- [5G-LENA (ns-3 NR) Documentation](https://cttc-lena.gitlab.io/nr/html/)
-- [3GPP Specifications](https://www.3gpp.org/)
-- [O-RAN Alliance](https://www.o-ran.org/)
-- [O-RAN E2 Interface Specification](https://www.o-ran.org/specifications)
-- [ANR COMSEMA Project](https://sites.google.com/view/anrcomsema)
+ib-ORAN is developed within the ANR COMSEMA project, funded by the French National Research Agency (ANR).
+
+## License
+
+The original contributions in this repository are licensed under the [MIT License](LICENSE). Third-party components keep their own copyright notices and licenses, which are preserved in their directories and summarized in [THIRD-PARTY.txt](THIRD-PARTY.txt).

@@ -64,5 +64,3 @@ notebook/dataset/market-1501/*
 *.pb.cc
 *.pb.h
 *_pb2.py
-
-.github

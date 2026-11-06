@@ -1,56 +1,59 @@
-# Simulation Data Guide
- 
-This document details the input datasets feeding the simulator based on different data formats as well as the discovered output after a simulation run.
+# Simulation data
 
+This document describes the data that feeds an ib-ORAN simulation and the outputs of a run. Paths are relative to `contrib/iboran`.
 
-## Input
+## Inputs
 
-ib-ORAN accepts datasets formatted according to the configured payload format:
+### Payload formats
 
-- `IMAGE` → Labeled images, each containing a specific object ID
-- `EMBEDDING` → Embeddings of the labeled images, generated automatically based on the selected model upon a primary simulation run (if they are missing)
+UEs carry payloads in the format set with `--data_format`:
 
-ib-ORAN supports the following image datasets, stored in the [`/notebook/dataset`](/notebook/dataset):
-
-- `toy` → A sample dataset for validating the simulation framework, containing 10 object IDs. Included in this repository.
-- `market-1501` → A benchmark person re-identification dataset consisting of automatically detected bounding-box images captured across multiple overlapping outdoor camera views to evaluate object ID matching across disjoint surveillance feeds. Not included in this repository — see [`THIRD-PARTY.txt`](/THIRD-PARTY.txt) for source, license terms, and citation, and place downloaded contents in the `market-1501` folder inside the dataset repository.
-
-> Each UE is assigned one object ID drawn uniformly from `--oid_range`, seeded by `--rng_run`. The intent of each link direction is drawn from the same range with the same seed, so a narrow range keeps at least one intent-relevant UE per link in most replications. A link with no intent-relevant UE reports a `SatisfactionScore` of NaN, which the campaign averages skip.
-
-> **Note:** Additional payload formats are currently under development.
-
-### Embedding Extraction
-
-ib-ORAN supports the following embedding extraction models (automatically fetched online to `/notebook/models/emb/` the first time):
-
-- `CLIP` → A multimodal framework trained via contrastive learning on image-text pairs to embed visual and textual concepts into a shared feature space for zero-shot image classification and retrieval (see [CLIP Model](https://huggingface.co/docs/transformers/en/model_doc/clip)).
-- `TransReID` → A pure Transformer architecture tailored for person and vehicle re-identification that leverages patch-level self-attention alongside side-information embeddings (such as camera ID and view angle) to extract robust, invariant feature representations (see [TransReID Model](https://github.com/damo-cv/TransReID)).
-
-
-## Output
-
-Each simulation run produces the following outputs:
-
-| Output | Location |
+| Format | Payload |
 |---|---|
-| Performance metrics logs | Console / log files |
-| KPIs of the run | [`/notebook/logs/kpi.json`](/notebook/logs) |
-| Merged run configuration (read by ns-3) | [`/notebook/logs/runConfig.yaml`](/notebook/logs) |
-| Recovered payload dataset | [`/notebook/dataset_dscv`](/notebook/dataset_dscv) |
-| NetAnim XML animation file | [`/notebook/netanim/`](/notebook/netanim) |
-| Real-time console flow stats | Console *(optional)* |
-| Detailed dApp / xApp control logs | [`/notebook/logs/`](/notebook/logs) *(optional)* |
+| `IMAGE` | Labeled images, each showing one object ID |
+| `EMBEDDING` | Embeddings of the labeled images, extracted with the model set by `--embedder` |
 
-A campaign additionally caches the KPI records of each run in `/notebook/logs/run_data/` and reuses them on the next call. Delete this folder, together with `/notebook/logs/checkpoints/`, after any change to the simulator code.
+When the embeddings of a dataset are missing, the first run with `EMBEDDING` extracts and stores them.
 
-### KPI Definitions
+> [!NOTE]
+> The `VIDEO` and `TEXT` formats are under development.
 
-| KPI | Definition |
+### Datasets
+
+Datasets are stored in [`notebook/dataset/`](../notebook/dataset), one folder per dataset, and selected with `--dataset_id`. Their filename patterns are set in the `datasets` section of [`iboranConfig.yaml`](../model/iboran_campaign/iboranConfig.yaml).
+
+| ID | Description | Included |
+|---|---|---|
+| `toy` | Sample dataset of 10 object IDs, for validating the framework | Yes |
+| `market-1501` | Person re-identification benchmark of bounding-box images detected across several outdoor camera views | No |
+
+To use Market-1501, download it from the source listed in [THIRD-PARTY.txt](../THIRD-PARTY.txt), which also gives its license terms and citation, and place its contents in `notebook/dataset/market-1501/`.
+
+### Embedding models
+
+The embedding models are downloaded to `notebook/models/emb/` on first use.
+
+| Model | Description |
 |---|---|
-| `PDR` | Received / transmitted packets over all flows of the link [%] |
-| `Throughput` | Received bits over the link's active period (first transmission to last reception), divided by the number of flows [kbps per UE] |
-| `Latency` | Mean packet delay over all received packets [ms] |
-| `Jitter` | Mean packet delay variation [ms] |
-| `PRBUtilizationRatio` | PRBs allocated by the dApp / PRBs offered at the dApp decision steps [%] |
-| `SatisfactionScore` | Mean `FidelityScore` over the intent-relevant UEs of the link; a relevant UE without a usable output counts as 0 |
-| `DAppDecisionTime` / `XAppDecisionTime` | Mean wall-clock time per decision [ms] |
+| [`CLIP`](https://huggingface.co/docs/transformers/en/model_doc/clip) | Multimodal model trained by contrastive learning on image-text pairs, which maps images and text into a shared feature space |
+| [`TransReID`](https://github.com/damo-cv/TransReID) | Transformer model for person and vehicle re-identification, which adds side information such as camera ID and view angle to patch-level self-attention |
+
+### Object IDs and intents
+
+Each UE is assigned one object ID drawn uniformly from `--oid_range`, seeded by `--rng_run`. The intent of each link direction is drawn from the same range with the same seed. A UE is intent-relevant on a link when its object ID matches the intent of that link. A narrow range keeps at least one intent-relevant UE per link in most replications. A link with no intent-relevant UE reports a [`SatisfactionScore`](kpis.md#intent-based-kpis) of NaN, which campaign averages skip.
+
+## Outputs
+
+| Output | Location | Written |
+|---|---|---|
+| Run statistics and KPI summary | Console | With `--verbose=true` |
+| KPIs of the run (see [KPIs](kpis.md)) | `notebook/logs/kpi.json` | Always |
+| Merged run configuration, read by ns-3 | `notebook/logs/runConfig.yaml` | Always |
+| dApp control log | `notebook/logs/` | With `--save_dapp_log=true` |
+| Flow monitor statistics | `notebook/.flowstats/iboran-flowstats.xml` | Always |
+| Recovered payloads | `notebook/dataset_dscv/<dataset>/` | Always |
+| NetAnim animation (see [visualization](visualization.md)) | `notebook/netanim/iboran-<rat>-anim.xml` | Always |
+
+### Cached results
+
+A [campaign](usage.md#campaign) caches the KPI records of each run in `notebook/logs/run_data/` and reuses them on the next call with the same settings. Delete this folder and `notebook/logs/checkpoints/` after any change to the simulator code, or the RAN model.

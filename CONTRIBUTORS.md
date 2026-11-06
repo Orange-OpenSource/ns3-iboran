@@ -1,17 +1,14 @@
 # Contributors
- 
-This file lists the authors of ib-ORAN who have agreed to be identified,
-in accordance with Orange open-source publication requirements.
- 
-Only contributors who have explicitly agreed to be credited are listed here.
-Contributors are identified by their full name and email address.
- 
+
+This file lists the authors of ib-ORAN who have agreed to be identified, as required by the Orange open-source publication rules. Each contributor is identified by full name and email address. Source file headers refer to this file for authorship.
+
 ## Orange SA
- 
+
 | Name | Email | Role |
 |---|---|---|
-| Pouya Agheli | pouya.agheli@orange.com | Lead Developer, Researcher |
-| Grégoire Lefebvre | gregoire.lefebvre@orange.com | Senior Researcher |
+| Pouya Agheli | pouya.agheli@orange.com | Lead developer, researcher |
+| Grégoire Lefebvre | gregoire.lefebvre@orange.com | Senior researcher |
 
- 
-> To be added to this list, contributors must explicitly agree to have their name and email published. Contact the maintainers to request addition or removal.
+## Being listed
+
+Only contributors who explicitly agree to have their name and email published are listed. To be added or removed, contact the maintainers listed above.

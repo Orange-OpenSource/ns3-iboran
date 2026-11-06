@@ -47,8 +47,8 @@ class IbOranCampaign:
         embedder,
         oid_range,
         save_dapp_log,
-        save_learning_convg,
-        verbose,
+        save_learning_convg=False,
+        verbose=False,
         n_pretrain_runs=1,
     ):
         self.run_cwd = run_cwd

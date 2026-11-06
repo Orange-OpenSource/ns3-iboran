@@ -99,14 +99,14 @@ orchestrator:
   k: 1                                # max parallel UEs scheduled per TTI/slot
   dapp_control_period_sf: 1           # dApp control period [subframes]
   xapp_control_period_f: 1            # xApp control period [frames]
-  dapp_algo_ue_selection: "Random"    # see doc/built-in-algos.md
-  xapp_algo_rbg_bounding: "Bypass"    # see doc/built-in-algos.md
+  dapp_algo_ue_selection: "Random"    # see doc/algos.md
+  xapp_algo_rbg_bounding: "Bypass"    # see doc/algos.md
   dataset_id: "market-1501"           # "toy" | "market-1501"
   data_format: "EMBEDDING"            # "IMAGE" | "VIDEO" | "EMBEDDING" | "TEXT"
   embedder: "TransReID"               # "TransReID" | "CLIP"
   oid_range: [4, 5]                   # [low, high], inclusive range of object IDs
   save_dapp_log: false
-  save_learning_convg: false
+  save_learning_convg: false          # NOTE: learning-based algos will be released in an upcoming version
   verbose: true
 
 # ============================================================

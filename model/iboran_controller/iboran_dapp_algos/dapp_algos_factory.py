@@ -43,9 +43,7 @@ _VALID_METRICS = {"Cqi", "BufferLevel", "PropFairness", "Criticality", "MultiCri
 _RL_ALGOS = {"NeuralLinUCB"}
 
 BASE_DAPP_ALGOS_KEYS = set(_STANDALONE) | {
-    f"{family}{metric}"
-    for family in _FAMILIES
-    for metric in _VALID_METRICS
+    f"{family}{metric}" for family in _FAMILIES for metric in _VALID_METRICS
 }
 
 PROP_FAIRNESS_TUNING_FACTOR = 0.1
