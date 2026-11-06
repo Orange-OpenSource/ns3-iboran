@@ -4,11 +4,11 @@ This document describes how to build ib-ORAN on top of ns-3 and verify the insta
 
 ## Prerequisites
 
-| Dependency | Version |
+| Dependency | Tested version |
 |---|---|
 | [ns-3](https://gitlab.com/nsnam/ns-3-dev) | 3.48 |
-| [ns3-ai](https://github.com/hust-diangroup/ns3-ai/blob/main/docs/install.md) | 1.2 |
-| [5G-LENA nr](https://gitlab.com/cttc-lena/nr) | 5.0 |
+| [ns3-ai](https://github.com/hust-diangroup/ns3-ai) | `main`, commit `b8c9858` |
+| [5G-LENA nr](https://gitlab.com/cttc-lena/nr) | 5.1 |
 | Python | 3.11+ |
 | g++ or clang++ | 11.1+ or 17.0+ |
 | CMake | 3.25+ |
@@ -17,11 +17,24 @@ This document describes how to build ib-ORAN on top of ns-3 and verify the insta
 | pybind11 | 3.0+ |
 | yaml-cpp | any version found by CMake |
 
+> [!NOTE]
+> Newer releases of ns-3 and nr are expected to work, but each nr release supports one ns-3 release, so pick a pair from the [nr release timeline](https://5g-lena.cttc.es/features/roadmap/). For ns3-ai, use the `main` branch: its release tags (1.0.0 to 1.2.0) predate the message interface that ib-ORAN uses.
+
 The `nr` module is required for both RATs, since the ib-ORAN library links against it. The Python packages are listed in [`requirements.txt`](../requirements.txt) and are installed by the setup script.
 
 ## Steps
 
-Install ns-3 first, with ns3-ai cloned into `contrib/ai` and nr cloned into `contrib/nr`. Follow the installation guides of [ns-3](https://www.nsnam.org/docs/installation/html/), [ns3-ai](https://github.com/hust-diangroup/ns3-ai/blob/main/docs/install.md) and [nr](https://gitlab.com/cttc-lena/nr), then follow the steps below.
+Install ns-3 first, with ns3-ai cloned into `contrib/ai` and nr cloned into `contrib/nr`. Follow the installation guides of [ns-3](https://www.nsnam.org/docs/installation/html/), [ns3-ai](https://github.com/hust-diangroup/ns3-ai/blob/main/docs/install.md) and [nr](https://gitlab.com/cttc-lena/nr), or clone the tested versions directly:
+
+```shell
+git clone --branch ns-3.48 --depth 1 https://gitlab.com/nsnam/ns-3-dev.git ns-3
+cd ns-3
+git clone https://github.com/hust-diangroup/ns3-ai.git contrib/ai
+git -C contrib/ai checkout b8c9858
+git clone --branch v5.1 --depth 1 https://gitlab.com/cttc-lena/nr.git contrib/nr
+```
+
+Then follow the steps below.
 
 ### Step 1: Clone ib-ORAN
 
@@ -82,6 +95,10 @@ export PYTHONPATH="/path/to/ns-3/contrib/iboran:$PYTHONPATH"
 ```
 
 ## Troubleshooting
+
+### pip reports "not a valid editable requirement"
+
+pip did not find a Python project at `contrib/ai/python_utils` or `contrib/ai/model/gym-interface/py`. Either the commands ran outside the ns-3 root, or ns3-ai was cloned at a release tag, which lacks these folders. Run the commands from the ns-3 root, with ns3-ai on its `main` branch.
 
 ### ns3-ai fails to configure
 
