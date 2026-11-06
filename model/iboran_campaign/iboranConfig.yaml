@@ -103,7 +103,7 @@ orchestrator:
   xapp_algo_rbg_bounding: "Bypass"    # see doc/algos.md
   dataset_id: "toy"                   # "toy" | "market-1501"
   data_format: "EMBEDDING"            # "IMAGE" | "VIDEO" | "EMBEDDING" | "TEXT"
-  embedder: "TransReID"               # "TransReID" | "CLIP"
+  embedder: "CLIP"                    # "TransReID" | "CLIP"
   oid_range: [4, 5]                   # [low, high], inclusive range of object IDs
   save_dapp_log: false
   save_learning_convg: false          # NOTE: learning-based algos will be released in an upcoming version
