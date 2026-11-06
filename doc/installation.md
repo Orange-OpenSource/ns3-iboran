@@ -30,8 +30,13 @@ Install ns-3 first, with ns3-ai cloned into `contrib/ai` and nr cloned into `con
 git clone --branch ns-3.48 --depth 1 https://gitlab.com/nsnam/ns-3-dev.git ns-3
 cd ns-3
 git clone https://github.com/hust-diangroup/ns3-ai.git contrib/ai
-git -C contrib/ai checkout b8c9858
 git clone --branch v5.1 --depth 1 https://gitlab.com/cttc-lena/nr.git contrib/nr
+```
+
+The ns3-ai examples do not build with ns-3.48, and ib-ORAN does not need them, so remove them:
+
+```shell
+rm -rf contrib/ai/examples
 ```
 
 Then follow the steps below.
@@ -100,9 +105,9 @@ export PYTHONPATH="/path/to/ns-3/contrib/iboran:$PYTHONPATH"
 
 pip did not find a Python project at `contrib/ai/python_utils` or `contrib/ai/model/gym-interface/py`. Either the commands ran outside the ns-3 root, or ns3-ai was cloned at a release tag, which lacks these folders. Run the commands from the ns-3 root, with ns3-ai on its `main` branch.
 
-### ns3-ai fails to configure
+### ns3-ai examples fail to build
 
-If configuring ns3-ai fails with errors about inconsistent function definitions, delete the `contrib/ai/examples` folder, then reconfigure and rebuild ns-3.
+With ns-3.48, the ns3-ai `rl-tcp` examples fail with "declaration of 'GetInstanceTypeId' overrides a 'final' function". ib-ORAN does not use them. Delete the `contrib/ai/examples` folder, then reconfigure and rebuild ns-3.
 
 ### Python cannot import ns3-ai or ib-ORAN
 

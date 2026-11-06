@@ -55,7 +55,7 @@ libtensorflow/
 libtorch/
 
 notebook/dataset/market-1501/*
-!notebook/dataset/market-1501/.gitkeep
+!notebook/dataset/market-1501/README.md
 
 # Binary data files
 *.f32

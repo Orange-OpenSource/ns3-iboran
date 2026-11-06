@@ -27,14 +27,13 @@ The Near-RT RIC uses the E2 service models E2SM-KPM, E2SM-RC and E2SM-DAPP, the 
 
 ib-ORAN builds as an ns-3 contrib module. It is tested with [ns-3.48](https://gitlab.com/nsnam/ns-3-dev), [ns3-ai](https://github.com/hust-diangroup/ns3-ai) from its `main` branch, [5G-LENA nr](https://gitlab.com/cttc-lena/nr) 5.1 and Python 3.11. The full list of prerequisites and the step-by-step procedure are in [installation](doc/installation.md).
 
-
 Clone ns-3 and the three contrib modules:
 
 ```shell
 git clone --branch ns-3.48 --depth 1 https://gitlab.com/nsnam/ns-3-dev.git ns-3
 cd ns-3
 git clone https://github.com/hust-diangroup/ns3-ai.git contrib/ai
-git -C contrib/ai checkout b8c9858
+rm -rf contrib/ai/examples
 git clone --branch v5.1 --depth 1 https://gitlab.com/cttc-lena/nr.git contrib/nr
 git clone https://github.com/Orange-OpenSource/ns3-iboran.git contrib/iboran
 ```
