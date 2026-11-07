@@ -7,7 +7,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## 2.2.1 (2026-11-06)
+## 2.2.1 (2026-11-07)
 
 ### Added
 - Code of conduct (`.github/CODE_OF_CONDUCT.md`, Contributor Covenant 2.0) and security policy (`.github/SECURITY.md`).
