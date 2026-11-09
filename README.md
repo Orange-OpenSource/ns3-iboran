@@ -1,7 +1,7 @@
 # ib-ORAN: Intent-Based Open RAN
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://spdx.org/licenses/MIT.html)
-[![ns-3](https://img.shields.io/badge/ns--3-3.48%2B-brightgreen)](https://www.nsnam.org)
+[![ns-3](https://img.shields.io/badge/ns--3-3.48-brightgreen)](https://www.nsnam.org)
 [![RAT](https://img.shields.io/badge/RAT-LTE%20%7C%20NR-orange)](https://www.3gpp.org/)
 
 ib-ORAN (`ns3-iboran`) is an [ns-3](https://www.nsnam.org) module for testing intent-based orchestration in Open RAN. You write the control logic in Python as Open RAN apps, and ib-ORAN runs it against a simulated LTE or 5G NR network. Alongside standard KPIs, it reports how well the expressed intent on each link is satisfied.
@@ -38,7 +38,7 @@ git clone --branch v5.1 --depth 1 https://gitlab.com/cttc-lena/nr.git contrib/nr
 git clone https://github.com/Orange-OpenSource/ns3-iboran.git contrib/iboran
 ```
 
-> [!NOTE]
+> [!TIP]
 > The versions above are the tested ones. Newer releases are expected to work, but each nr release supports one ns-3 release, so pick a pair from the [nr release timeline](https://5g-lena.cttc.es/features/roadmap/).
 
 Create a Python virtual environment in the ns-3 root and install the ns3-ai Python interfaces:

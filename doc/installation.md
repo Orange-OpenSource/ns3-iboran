@@ -17,7 +17,7 @@ This document describes how to build ib-ORAN on top of ns-3 and verify the insta
 | pybind11 | 3.0+ |
 | yaml-cpp | any version found by CMake |
 
-> [!NOTE]
+> [!TIP]
 > Newer releases of ns-3 and nr are expected to work, but each nr release supports one ns-3 release, so pick a pair from the [nr release timeline](https://5g-lena.cttc.es/features/roadmap/). For ns3-ai, use the `main` branch: its release tags (1.0.0 to 1.2.0) predate the message interface that ib-ORAN uses.
 
 The `nr` module is required for both RATs, since the ib-ORAN library links against it. The Python packages are listed in [`requirements.txt`](../requirements.txt) and are installed by the setup script.
