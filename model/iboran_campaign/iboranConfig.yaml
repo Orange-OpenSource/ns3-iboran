@@ -35,13 +35,11 @@ common:
   backhaulDelay: 10.0           # [ms]
 
   enableDlFlow: true
-  dlTxRepeat: 1                 # TODO: app layer doesn't yet support multiple receptions
   dlPacketSize: 512             # [bytes]
   dlBitRate: 2000000            # [bps]
   dlUseUdp: true
 
   enableUlFlow: true
-  ulTxRepeat: 1
   ulPacketSize: 512             # [bytes]
   ulBitRate: 1000000            # [bps]
   ulUseUdp: true

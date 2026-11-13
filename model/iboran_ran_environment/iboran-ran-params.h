@@ -46,14 +46,12 @@ struct CommonRanParams
     double backhaulDelay;      // backhaul link delay [ms]
 
     bool enableDlFlow;     // enable downlink data flows]
-    uint32_t dlTxRepeat;   // number of times to repeat data transmission
     uint32_t dlPacketSize; // downlink packet size [bytes]
     uint32_t dlBitRate;    // downlink bit rate [bps]
     double dlMinInterval;  // downlink minimum inter-packet interval [ms]
     bool dlUseUdp;         // whether to use UDP protocol instead of TCP
 
     bool enableUlFlow;     // enable uplink data flow
-    uint32_t ulTxRepeat;   // number of times to repeat data transmission
     uint32_t ulPacketSize; // uplink packet size [bytes]
     uint32_t ulBitRate;    // uplink bit rate [bps]
     double ulMinInterval;  // uplink minimum inter-packet interval [ms]

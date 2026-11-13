@@ -148,8 +148,6 @@ IbOranTransmissionApplication::IbOranTransmissionApplication()
       m_minPacketIntervalMs(0),
       m_rntiRetryDelayMs(50),
       m_dataOffset(0),
-      m_txRepeat(1),
-      m_repeatCount(1),
       m_txTotalBytes(0),
       m_connected(false),
       m_cachedRnti(0),
@@ -212,8 +210,6 @@ IbOranTransmissionApplication::LoadData(std::string filePath, DataFormat format)
     m_format = format;
     m_dataOffset = 0;
 
-    m_originalData = m_data;
-
     if (m_format == DataFormat::EMBEDDING)
     {
         EnforceEmbeddingPacketSize();
@@ -241,8 +237,6 @@ IbOranTransmissionApplication::LoadDataFromBuffer(const uint8_t* data,
     m_format = format;
     m_dataOffset = 0;
 
-    m_originalData = m_data;
-
     NS_LOG_INFO("Loaded data from buffer: " << size << " bytes | "
                                             << "Format: " << FormatToString(format));
 }
@@ -252,13 +246,6 @@ IbOranTransmissionApplication::SetPeer(Address address)
 {
     NS_LOG_FUNCTION(this << address);
     m_peer = address;
-}
-
-void
-IbOranTransmissionApplication::SetTxRepeat(uint32_t txRepeat)
-{
-    NS_LOG_FUNCTION(this << txRepeat);
-    m_txRepeat = txRepeat;
 }
 
 void
@@ -513,24 +500,6 @@ IbOranTransmissionApplication::SendNextPacket()
                                  MilliSeconds(m_minPacketIntervalMs));
         m_sendEvent =
             Simulator::Schedule(interval, &IbOranTransmissionApplication::SendNextPacket, this);
-    }
-    // Schedule repeat if configured to do so and we've completed one full transmission.
-    else if (m_txRepeat == 0 || m_repeatCount < m_txRepeat)
-    {
-        if (!m_originalData.empty())
-        {
-            NS_LOG_INFO("Repeat " << m_repeatCount << "/" << m_txRepeat
-                                  << " — restarting transmission");
-            m_data = m_originalData;
-            m_dataOffset = 0;
-
-            // schedule next repeat if configured to do so.
-            Time repeatInterval = std::max(MilliSeconds(1.0), MilliSeconds(m_minPacketIntervalMs));
-            m_sendEvent = Simulator::Schedule(repeatInterval,
-                                              &IbOranTransmissionApplication::SendNextPacket,
-                                              this);
-            m_repeatCount++;
-        }
     }
 }
 

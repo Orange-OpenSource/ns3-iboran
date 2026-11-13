@@ -44,13 +44,11 @@ class CommonRanParams(BaseModel):
     backhaulDelay: float = 10.0
 
     enableDlFlow: bool = True
-    dlTxRepeat: int = 1
     dlPacketSize: int = 512
     dlBitRate: int = 200_000
     dlUseUdp: bool = True
 
     enableUlFlow: bool = True
-    ulTxRepeat: int = 1
     ulPacketSize: int = 512
     ulBitRate: int = 100_000
     ulUseUdp: bool = True

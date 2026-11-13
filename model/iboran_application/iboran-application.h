@@ -60,7 +60,6 @@ class IbOranTransmissionApplication : public Application
     // set destination address and port
     void SetPeer(Address address);
 
-    void SetTxRepeat(uint32_t txRepeat);
     void SetPacketSize(uint32_t packetSize);
     void SetBitRate(uint32_t bitRate);
     void SetMinPacketInterval(uint32_t intervalMs);
@@ -109,12 +108,9 @@ class IbOranTransmissionApplication : public Application
     uint32_t m_minPacketIntervalMs; // minimum interval between packets in ms
     uint32_t m_rntiRetryDelayMs;
     uint32_t m_dataOffset;
-    uint32_t m_txRepeat;                 // number of times to repeat the transmission
-    uint32_t m_repeatCount;              // current repeat iteration
-    uint32_t m_txTotalBytes;             // total bytes transmitted
-    std::vector<uint8_t> m_originalData; // preserve original data for replay
-    bool m_connected;                    // connection status
-    mutable uint16_t m_cachedRnti;       // cached RNTI value
+    uint32_t m_txTotalBytes;       // total bytes transmitted
+    bool m_connected;              // connection status
+    mutable uint16_t m_cachedRnti; // cached RNTI value
     bool m_useUdp;
     LinkDirection m_linkDirection; // link direction (UPLINK or DOWNLINK)
 

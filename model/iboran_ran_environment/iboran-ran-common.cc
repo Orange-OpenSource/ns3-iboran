@@ -462,8 +462,7 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             dlTxApp->SetInputImageFormat(py2CppParams.inputImageFormat);
             dlTxApp->LoadData(dlInputStem, commonParams.dataFormat);
             uint32_t fileSizeBytes = dlTxApp->GetRemainingDataSize();
-            if (commonParams.simTime <
-                (fileSizeBytes * 8.0 / commonParams.dlBitRate) * commonParams.dlTxRepeat + 5.0)
+            if (commonParams.simTime < (fileSizeBytes * 8.0 / commonParams.dlBitRate) + 5.0)
             {
                 std::cerr << "Simulation time may be too short to complete the "
                              "downlink transmission of all data.\n";
@@ -471,7 +470,6 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             dlTxApp->SetPeer(InetSocketAddress(ueIpIfaces.GetAddress(ueCount), dlPort + ueCount));
             dlTxApp->SetRntiGetter(rntiGetter);
             dlTxApp->SetLinkDirection(LinkDirection::DOWNLINK);
-            dlTxApp->SetTxRepeat(commonParams.dlTxRepeat);
             dlTxApp->SetPacketSize(commonParams.dlPacketSize);
             dlTxApp->SetBitRate(commonParams.dlBitRate);
             dlTxApp->SetMinPacketInterval(commonParams.dlMinInterval);
@@ -532,8 +530,7 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             ulTxApp->SetInputImageFormat(py2CppParams.inputImageFormat);
             ulTxApp->LoadData(ulInputStem, commonParams.dataFormat);
             uint32_t fileSizeBytes = ulTxApp->GetRemainingDataSize();
-            if (commonParams.simTime <
-                (fileSizeBytes * 8.0 / commonParams.ulBitRate) * commonParams.ulTxRepeat + 5.0)
+            if (commonParams.simTime < (fileSizeBytes * 8.0 / commonParams.ulBitRate) + 5.0)
             {
                 std::cerr << "Simulation time may be too short to complete the "
                              "uplink transmission of all data.\n";
@@ -541,7 +538,6 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             ulTxApp->SetPeer(InetSocketAddress(remoteHostAddr, ulPort + ueCount));
             ulTxApp->SetRntiGetter(rntiGetter);
             ulTxApp->SetLinkDirection(LinkDirection::UPLINK);
-            ulTxApp->SetTxRepeat(commonParams.ulTxRepeat);
             ulTxApp->SetPacketSize(commonParams.ulPacketSize);
             ulTxApp->SetBitRate(commonParams.ulBitRate);
             ulTxApp->SetMinPacketInterval(commonParams.ulMinInterval);

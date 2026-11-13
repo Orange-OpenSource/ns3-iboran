@@ -79,14 +79,12 @@ SimParams::SimParams()
     common.backhaulDelay = 10.0;
 
     common.enableDlFlow = true;
-    common.dlTxRepeat = 1; // TODO: Revise application layer to support multiple receptions
     common.dlPacketSize = 512;
     common.dlBitRate = 200e3;
     common.dlMinInterval = 0.0;
     common.dlUseUdp = true;
 
     common.enableUlFlow = true;
-    common.ulTxRepeat = 1;
     common.ulPacketSize = 512;
     common.ulBitRate = 100e3;
     common.ulMinInterval = 0.0;
@@ -267,10 +265,6 @@ SimParams::LoadFromYaml(const std::string& filepath)
         {
             common.enableDlFlow = c["enableDlFlow"].as<bool>();
         }
-        if (c["dlTxRepeat"])
-        {
-            common.dlTxRepeat = c["dlTxRepeat"].as<uint32_t>();
-        }
         if (c["dlPacketSize"])
         {
             common.dlPacketSize = c["dlPacketSize"].as<uint32_t>();
@@ -287,10 +281,6 @@ SimParams::LoadFromYaml(const std::string& filepath)
         if (c["enableUlFlow"])
         {
             common.enableUlFlow = c["enableUlFlow"].as<bool>();
-        }
-        if (c["ulTxRepeat"])
-        {
-            common.ulTxRepeat = c["ulTxRepeat"].as<uint32_t>();
         }
         if (c["ulPacketSize"])
         {
@@ -449,8 +439,6 @@ operator<<(std::ostream& os, const SimParams& params)
            : commonParams.dataFormat == DataFormat::TEXT      ? "TEXT"
                                                               : "UNKNOWN")
        << "\n"
-       << std::setw(30) << "Downlink Transmission Repeat" << ": " << std::setw(1)
-       << commonParams.dlTxRepeat << "\n"
        << std::setw(30) << "Downlink Packet Size" << ": " << std::setw(1)
        << commonParams.dlPacketSize << " bytes\n"
        << std::setw(30) << "Downlink Bit Rate" << ": " << std::setw(1)
@@ -468,8 +456,6 @@ operator<<(std::ostream& os, const SimParams& params)
            : commonParams.dataFormat == DataFormat::TEXT      ? "TEXT"
                                                               : "UNKNOWN")
        << "\n"
-       << std::setw(30) << "Uplink Transmission Repeat" << ": " << std::setw(1)
-       << commonParams.ulTxRepeat << "\n"
        << std::setw(30) << "Uplink Packet Size" << ": " << std::setw(1) << commonParams.ulPacketSize
        << " bytes\n"
        << std::setw(30) << "Uplink Bit Rate" << ": " << std::setw(1) << commonParams.ulBitRate / 1e3
