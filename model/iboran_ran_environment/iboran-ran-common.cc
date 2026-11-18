@@ -71,7 +71,8 @@ LoadPy2CppParams(const std::filesystem::path& filepath)
                               ? entry["output_fields"].as<std::vector<std::string>>()
                               : std::vector<std::string>{};
 
-    // NOT dataset-specific: shared across all datasets, from `orchestrator.oid_range`.
+    // NOT dataset-specific: shared across all datasets, from
+    // `orchestrator.oid_range`.
     params.oidRange = py["oid_range"] ? py["oid_range"].as<std::vector<int>>() : std::vector<int>{};
 
     return params;
@@ -245,6 +246,69 @@ WriteInputResolutionRecord(const std::filesystem::path& outPath,
     ofs << "\n}\n";
 }
 
+namespace
+{
+
+// One link of one UE in notebook/logs/appMessages.json
+struct MessageLogEntry
+{
+    Ptr<IbOranReceptionApplication> app;
+    std::string objectId;
+    std::string outputFile;
+    Ptr<IbOranTransmissionApplication> txApp; // set once created
+};
+
+// Same layout as oidQueries.json: link abbreviation, then UE index (from 1).
+void
+WriteMessageLogRecord(const std::filesystem::path& outPath,
+                      const std::map<std::string, std::map<uint32_t, MessageLogEntry>>& record)
+{
+    std::filesystem::create_directories(outPath.parent_path());
+
+    std::ofstream ofs(outPath);
+    if (!ofs.is_open())
+    {
+        NS_LOG_ERROR("Could not open application message log file: " << outPath);
+        return;
+    }
+
+    ofs << "{";
+    bool firstAbbr = true;
+    for (const auto& [abbr, ueMap] : record)
+    {
+        ofs << (firstAbbr ? "\n" : ",\n");
+        firstAbbr = false;
+
+        ofs << "  \"" << abbr << "\": {";
+        bool firstUe = true;
+        for (const auto& [ueIdx, entry] : ueMap)
+        {
+            ofs << (firstUe ? "\n" : ",\n");
+            firstUe = false;
+            ofs << "    \"" << ueIdx + 1 << "\": {\n"
+                << "      \"objectId\": \"" << JsonEscape(entry.objectId) << "\",\n"
+                << "      \"outputFile\": \"" << JsonEscape(entry.outputFile) << "\",\n"
+                << "      \"transmission\": ";
+            if (entry.txApp)
+            {
+                entry.txApp->WriteMessageLog(ofs, "      ");
+            }
+            else
+            {
+                ofs << "null";
+            }
+            ofs << ",\n"
+                << "      \"reception\": ";
+            entry.app->WriteMessageLog(ofs, "      ");
+            ofs << "\n    }";
+        }
+        ofs << (firstUe ? "}" : "\n  }");
+    }
+    ofs << (firstAbbr ? "}\n" : "\n}\n");
+}
+
+} // namespace
+
 // == MOBILITY FUNCTIONS ==============================================
 void
 SetupBackhaulMobility(const CommonRanParams& commonParams,
@@ -281,7 +345,8 @@ SetupBackhaulMobility(const CommonRanParams& commonParams,
     remoteHost->GetObject<MobilityModel>()->SetPosition(
         Vector(commonParams.simAreaLength, commonParams.simAreaLength, 0.0));
 
-    std::cout << std::left << std::setw(30) << "Backhaul mobility setup" << ": OK\n"
+    std::cout << std::left << std::setw(30) << "Backhaul mobility setup"
+              << ": OK\n"
               << std::setw(30) << "PGW position" << ": "
               << pgw->GetObject<MobilityModel>()->GetPosition() << " m\n"
               << std::setw(30) << "SGW position" << ": "
@@ -377,6 +442,28 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
     std::filesystem::create_directories(input_dir);
     std::filesystem::create_directories(output_dir);
 
+    // Application-layer options shared by every flow (see doc/application.md).
+    IbOranEnvelopeModel envelope = IbOranEnvelopeModel::NONE;
+    if (!ParseEnvelopeModel(commonParams.appEnvelope, envelope))
+    {
+        NS_LOG_ERROR("Unknown appEnvelope '" << commonParams.appEnvelope << "', using None");
+    }
+    IbOranFillPolicy fillPolicy = IbOranFillPolicy::AUTO;
+    if (!ParseFillPolicy(commonParams.appFillPolicy, fillPolicy))
+    {
+        NS_LOG_ERROR("Unknown appFillPolicy '" << commonParams.appFillPolicy << "', using Auto");
+    }
+    auto configureTx = [&](Ptr<IbOranTransmissionApplication> app) {
+        app->SetFraming(commonParams.appFraming);
+        app->SetEnvelopeModel(envelope);
+        app->SetEmbeddingPrefixCriticality(commonParams.appEmbeddingPrefixCriticality);
+    };
+    auto configureRx = [&](Ptr<IbOranReceptionApplication> app) {
+        app->SetFraming(commonParams.appFraming || envelope != IbOranEnvelopeModel::NONE);
+        app->SetFillPolicy(fillPolicy);
+        app->SetSaveAllMessages(commonParams.appSaveAllMessages);
+    };
+
     std::mt19937 gen(commonParams.rngRun);
     // random UE object ID (1 ID per input file)
     std::uniform_int_distribution<> dist(
@@ -387,6 +474,16 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
     // link abbreviation ("dl"/"ul") then UE index, so it can be written out
     // once the loop below completes.
     std::map<std::string, std::map<uint32_t, std::string>> inputResolutionRecord;
+
+    // Receivers whose messages go to notebook/logs/appMessages.json
+    std::map<std::string, std::map<uint32_t, MessageLogEntry>> messageLogRecord;
+
+    // Output extension, as the KPI step expects: the dataset's image extension
+    // for IMAGE, the default extension of the format otherwise.
+    const std::string outputExtension =
+        (commonParams.dataFormat == DataFormat::IMAGE && !py2CppParams.inputImageFormat.empty())
+            ? py2CppParams.inputImageFormat
+            : GetFileExtension(commonParams.dataFormat);
 
     for (uint32_t ueCount = 0; ueCount < ueNodes.GetN(); ++ueCount)
     {
@@ -404,7 +501,7 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
         }
 
         // -- DOWNLINK FLOW ------------------------------------------
-        if (commonParams.enableDlFlow)
+        if (commonParams.appDlEnable)
         {
             std::string dlUeObjectId = std::to_string(dist(gen));
 
@@ -426,7 +523,7 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
                                                             dlResolvedObjectId);
             if (dlResolvedObjectId != dlUeObjectId)
             {
-                NS_LOG_INFO("UE " << ueCount << " (DL): object_id " << dlUeObjectId
+                NS_LOG_INFO("UE " << (ueCount + 1) << " (DL): object_id " << dlUeObjectId
                                   << " has no data for camera_id " << dlCameraId
                                   << "; using object_id " << dlResolvedObjectId << " instead");
                 dlUeObjectId = dlResolvedObjectId;
@@ -437,9 +534,7 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             std::string dlInputStem =
                 std::filesystem::path(dlInputFullPath).replace_extension("").string();
 
-            // -- Receiver side (UE) -- uses the final (possibly-adjusted)
-            // dlUeObjectId so output naming and downstream intent matching
-            // stay consistent with the identity actually transmitted.
+            // -- Receiver side (UE)
             std::map<std::string, std::string> dlOutputValues = {
                 {"abbr", "dl"},
                 {"object_id", dlUeObjectId},
@@ -449,10 +544,17 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             Ptr<IbOranReceptionApplication> dlRxApp = CreateObject<IbOranReceptionApplication>();
             dlRxApp->SetLocalAddress(
                 InetSocketAddress(ueIpIfaces.GetAddress(ueCount), dlPort + ueCount));
-            dlRxApp->SetOutputPath(output_dir / BuildOutputFilename(py2CppParams, dlOutputValues),
-                                   commonParams.dataFormat);
+            const std::string dlOutputFilename = BuildOutputFilename(py2CppParams, dlOutputValues);
+            dlRxApp->SetOutputPath(output_dir / dlOutputFilename, commonParams.dataFormat);
             dlRxApp->SetDataFormat(commonParams.dataFormat);
-            dlRxApp->SetUseUdp(commonParams.dlUseUdp);
+            dlRxApp->SetUseUdp(commonParams.appDlTransport == "UDP");
+            dlRxApp->SetOutputImageFormat(py2CppParams.inputImageFormat);
+            dlRxApp->SetIdPrefix("dl-ue" + std::to_string(ueCount + 1));
+            configureRx(dlRxApp);
+            messageLogRecord["dl"][ueCount] = {dlRxApp,
+                                               dlUeObjectId,
+                                               dlOutputFilename + outputExtension,
+                                               {}};
             ueNodes.Get(ueCount)->AddApplication(dlRxApp);
             rxApps.Add(dlRxApp);
 
@@ -461,8 +563,8 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
                 CreateObject<IbOranTransmissionApplication>();
             dlTxApp->SetInputImageFormat(py2CppParams.inputImageFormat);
             dlTxApp->LoadData(dlInputStem, commonParams.dataFormat);
-            uint32_t fileSizeBytes = dlTxApp->GetRemainingDataSize();
-            if (commonParams.simTime < (fileSizeBytes * 8.0 / commonParams.dlBitRate) + 5.0)
+            uint32_t fileSizeBytes = dlTxApp->GetLoadedDataSize();
+            if (commonParams.simTime < fileSizeBytes * 8.0 / commonParams.appDlBitRate + 5.0)
             {
                 std::cerr << "Simulation time may be too short to complete the "
                              "downlink transmission of all data.\n";
@@ -470,24 +572,22 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             dlTxApp->SetPeer(InetSocketAddress(ueIpIfaces.GetAddress(ueCount), dlPort + ueCount));
             dlTxApp->SetRntiGetter(rntiGetter);
             dlTxApp->SetLinkDirection(LinkDirection::DOWNLINK);
-            dlTxApp->SetPacketSize(commonParams.dlPacketSize);
-            dlTxApp->SetBitRate(commonParams.dlBitRate);
-            dlTxApp->SetMinPacketInterval(commonParams.dlMinInterval);
-            dlTxApp->SetUseUdp(commonParams.dlUseUdp);
+            dlTxApp->SetPacketSize(commonParams.appDlPacketSize);
+            dlTxApp->SetBitRate(commonParams.appDlBitRate);
+            dlTxApp->SetMinPacketIntervalTime(Seconds(commonParams.appDlMinInterval));
+            dlTxApp->SetUseUdp(commonParams.appDlTransport == "UDP");
             dlTxApp->SetUeObjectId(dlUeObjectId);
+            configureTx(dlTxApp);
+            messageLogRecord["dl"][ueCount].txApp = dlTxApp;
             remoteHost->AddApplication(dlTxApp);
             txApps.Add(dlTxApp);
         }
 
         // -- UPLINK FLOW --------------------------------------------
-        if (commonParams.enableUlFlow)
+        if (commonParams.appUlEnable)
         {
             std::string ulUeObjectId = std::to_string(dist(gen));
-            // std::string ulUeObjectId = std::to_string((ueCount / 2) + 1);
 
-            // Resolve the input file first (see downlink note above); this
-            // may adjust ulUeObjectId if the drawn identity has no data for
-            // this UE's fixed camera assignment.
             std::string ulCameraId = std::to_string(ueCount + 1);
             std::string ulResolvedObjectId = ulUeObjectId;
             std::string ulInputFullPath = ResolveInputForUe(input_dir,
@@ -498,7 +598,7 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
                                                             ulResolvedObjectId);
             if (ulResolvedObjectId != ulUeObjectId)
             {
-                NS_LOG_INFO("UE " << ueCount << " (UL): object_id " << ulUeObjectId
+                NS_LOG_INFO("UE " << (ueCount + 1) << " (UL): object_id " << ulUeObjectId
                                   << " has no data for camera_id " << ulCameraId
                                   << "; using object_id " << ulResolvedObjectId << " instead");
                 ulUeObjectId = ulResolvedObjectId;
@@ -517,10 +617,17 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             // -- Receiver side (Remote Host)
             Ptr<IbOranReceptionApplication> ulRxApp = CreateObject<IbOranReceptionApplication>();
             ulRxApp->SetLocalAddress(InetSocketAddress(remoteHostAddr, ulPort + ueCount));
-            ulRxApp->SetOutputPath(output_dir / BuildOutputFilename(py2CppParams, ulOutputValues),
-                                   commonParams.dataFormat);
+            const std::string ulOutputFilename = BuildOutputFilename(py2CppParams, ulOutputValues);
+            ulRxApp->SetOutputPath(output_dir / ulOutputFilename, commonParams.dataFormat);
             ulRxApp->SetDataFormat(commonParams.dataFormat);
-            ulRxApp->SetUseUdp(commonParams.ulUseUdp);
+            ulRxApp->SetUseUdp(commonParams.appUlTransport == "UDP");
+            ulRxApp->SetOutputImageFormat(py2CppParams.inputImageFormat);
+            ulRxApp->SetIdPrefix("ul-ue" + std::to_string(ueCount + 1));
+            configureRx(ulRxApp);
+            messageLogRecord["ul"][ueCount] = {ulRxApp,
+                                               ulUeObjectId,
+                                               ulOutputFilename + outputExtension,
+                                               {}};
             remoteHost->AddApplication(ulRxApp);
             rxApps.Add(ulRxApp);
 
@@ -529,8 +636,8 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
                 CreateObject<IbOranTransmissionApplication>();
             ulTxApp->SetInputImageFormat(py2CppParams.inputImageFormat);
             ulTxApp->LoadData(ulInputStem, commonParams.dataFormat);
-            uint32_t fileSizeBytes = ulTxApp->GetRemainingDataSize();
-            if (commonParams.simTime < (fileSizeBytes * 8.0 / commonParams.ulBitRate) + 5.0)
+            uint32_t fileSizeBytes = ulTxApp->GetLoadedDataSize();
+            if (commonParams.simTime < fileSizeBytes * 8.0 / commonParams.appUlBitRate + 5.0)
             {
                 std::cerr << "Simulation time may be too short to complete the "
                              "uplink transmission of all data.\n";
@@ -538,11 +645,13 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
             ulTxApp->SetPeer(InetSocketAddress(remoteHostAddr, ulPort + ueCount));
             ulTxApp->SetRntiGetter(rntiGetter);
             ulTxApp->SetLinkDirection(LinkDirection::UPLINK);
-            ulTxApp->SetPacketSize(commonParams.ulPacketSize);
-            ulTxApp->SetBitRate(commonParams.ulBitRate);
-            ulTxApp->SetMinPacketInterval(commonParams.ulMinInterval);
-            ulTxApp->SetUseUdp(commonParams.ulUseUdp);
+            ulTxApp->SetPacketSize(commonParams.appUlPacketSize);
+            ulTxApp->SetBitRate(commonParams.appUlBitRate);
+            ulTxApp->SetMinPacketIntervalTime(Seconds(commonParams.appUlMinInterval));
+            ulTxApp->SetUseUdp(commonParams.appUlTransport == "UDP");
             ulTxApp->SetUeObjectId(ulUeObjectId);
+            configureTx(ulTxApp);
+            messageLogRecord["ul"][ueCount].txApp = ulTxApp;
             ueNodes.Get(ueCount)->AddApplication(ulTxApp);
             txApps.Add(ulTxApp);
         }
@@ -552,10 +661,27 @@ SetupIbOranApplications(const CommonRanParams& commonParams,
         current_dir / "contrib/iboran/notebook/logs/oidQueries.json";
     WriteInputResolutionRecord(input_resolution_path, inputResolutionRecord);
 
+    const Time rxStop = Seconds(commonParams.simTime) - Seconds(1.0);
     rxApps.Start(Seconds(1.0));
     txApps.Start(Seconds(1.1));
-    rxApps.Stop(Seconds(commonParams.simTime) - Seconds(1.0));
+    rxApps.Stop(rxStop);
     txApps.Stop(Seconds(commonParams.simTime) - Seconds(1.1));
+
+    // The receivers finalize their messages when they stop, so the log is
+    // written just after. A log of a previous run is removed when disabled.
+    const std::filesystem::path messageLogPath =
+        current_dir / "contrib/iboran/notebook/logs/appMessages.json";
+    if (commonParams.appSaveMessageLog)
+    {
+        Simulator::Schedule(rxStop + MilliSeconds(1), [messageLogPath, messageLogRecord]() {
+            WriteMessageLogRecord(messageLogPath, messageLogRecord);
+        });
+    }
+    else
+    {
+        std::error_code ec;
+        std::filesystem::remove(messageLogPath, ec);
+    }
 }
 
 void
@@ -570,103 +696,92 @@ PrintApplicationStats(const CommonRanParams& commonParams,
 
     std::cout << "\nib-ORAN " << ratType << " Environment: Deriving stats..." << std::endl;
 
-    for (uint32_t ueCount = 0; ueCount < ueNodes.GetN(); ++ueCount)
-    {
-        // -- DOWNLINK STATS -----------------------------------------
-        if (commonParams.enableDlFlow)
+    // One line per link of a UE. With framing, sent and received fragments are
+    // compared (over TCP a socket read may hold several fragments). Without
+    // framing, UDP datagrams are compared; a raw TCP stream has no packet
+    // boundaries, so bytes are compared instead.
+    auto printLink = [&commonParams](uint32_t ueIndex,
+                                     const std::string& label,
+                                     bool useUdp,
+                                     Ptr<IbOranTransmissionApplication> txApp,
+                                     Ptr<IbOranReceptionApplication> rxApp,
+                                     Time& linkDuration) {
+        const bool framing = commonParams.appFraming || commonParams.appEnvelope != "None";
+        const bool countBytes = !framing && !useUdp;
+        uint32_t sent = 0;
+        uint32_t received = 0;
+        Time duration = Seconds(0.0);
+
+        if (txApp)
         {
-            uint32_t txIndex = ueCount;
-            uint32_t rxIndex = ueCount;
-
-            uint32_t dlPacketTransmitted = 0;
-            uint32_t dlPacketReceived = 0;
-            Time dlTransmissionDuration = Seconds(0.0);
-
-            Ptr<IbOranTransmissionApplication> dlTxApp =
-                DynamicCast<IbOranTransmissionApplication>(txApps.Get(txIndex));
-            Ptr<IbOranReceptionApplication> dlRxApp =
-                DynamicCast<IbOranReceptionApplication>(rxApps.Get(rxIndex));
-
-            if (dlTxApp)
+            sent = countBytes ? txApp->GetTotalBytesTransmitted()
+                              : txApp->GetTotalPacketsTransmitted();
+        }
+        if (rxApp)
+        {
+            if (countBytes)
             {
-                uint32_t bytesTransmitted = dlTxApp->GetTotalBytesTransmitted();
-                dlPacketTransmitted =
-                    (bytesTransmitted + commonParams.dlPacketSize - 1) / commonParams.dlPacketSize;
+                received = rxApp->GetTotalBytesReceived();
             }
-            if (dlRxApp)
+            else if (framing)
             {
-                dlPacketReceived = dlRxApp->GetPacketCount();
-                dlTransmissionDuration = dlRxApp->GetTransmissionDuration();
-                dlAppDuration += dlTransmissionDuration;
+                received = rxApp->GetFragmentCount();
             }
-
-            int32_t dlPacketLost = int32_t(dlPacketTransmitted) - int32_t(dlPacketReceived);
-            if (dlPacketLost < 0)
+            else
             {
-                dlPacketLost = 0;
+                received = rxApp->GetPacketCount();
             }
-
-            if (dlPacketTransmitted > 0)
-            {
-                std::string color = (dlPacketLost == 0) ? "\033[92m" : "\033[91m";
-                std::cout << color << "UE " << std::setw(2) << ueCount
-                          << " | Downlink | Succeeded: " << std::setw(4) << dlPacketReceived
-                          << "| Lost: " << std::setw(3) << dlPacketLost
-                          << " | Duration: " << dlTransmissionDuration.GetMilliSeconds() << "ms"
-                          << "\033[0m\n";
-            }
+            duration = rxApp->GetTransmissionDuration();
+            linkDuration += duration;
+        }
+        if (sent == 0)
+        {
+            return;
         }
 
-        // -- UPLINK STATS -------------------------------------------
-        if (commonParams.enableUlFlow)
+        const uint32_t lost = (sent > received) ? sent - received : 0;
+        const std::string unit = countBytes ? " B" : "";
+        const std::string color = (lost == 0) ? "\033[92m" : "\033[91m";
+        std::cout << color << "UE " << std::setw(2) << (ueIndex + 1) << " | " << label
+                  << " | Succeeded: " << std::setw(4) << received << unit
+                  << "| Lost: " << std::setw(3) << lost << unit
+                  << " | Duration: " << duration.GetMilliSeconds() << "ms"
+                  << "\033[0m\n";
+    };
+
+    // SetupIbOranApplications adds the applications UE by UE, downlink first:
+    // dl0, ul0, dl1, ul1, ... (only the enabled links).
+    const uint32_t appsPerUe =
+        (commonParams.appDlEnable ? 1 : 0) + (commonParams.appUlEnable ? 1 : 0);
+
+    for (uint32_t ueCount = 0; ueCount < ueNodes.GetN(); ++ueCount)
+    {
+        if (commonParams.appDlEnable)
         {
-            uint32_t txIndex = ueNodes.GetN() + ueCount;
-            uint32_t rxIndex = ueNodes.GetN() + ueCount;
-
-            uint32_t ulPacketTransmitted = 0;
-            uint32_t ulPacketReceived = 0;
-            Time ulTransmissionDuration = Seconds(0.0);
-
-            Ptr<IbOranTransmissionApplication> ulTxApp =
-                DynamicCast<IbOranTransmissionApplication>(txApps.Get(txIndex));
-            Ptr<IbOranReceptionApplication> ulRxApp =
-                DynamicCast<IbOranReceptionApplication>(rxApps.Get(rxIndex));
-
-            if (ulTxApp)
-            {
-                uint32_t bytesTransmitted = ulTxApp->GetTotalBytesTransmitted();
-                ulPacketTransmitted =
-                    (bytesTransmitted + commonParams.ulPacketSize - 1) / commonParams.ulPacketSize;
-            }
-            if (ulRxApp)
-            {
-                ulPacketReceived = ulRxApp->GetPacketCount();
-                ulTransmissionDuration = ulRxApp->GetTransmissionDuration();
-                ulAppDuration += ulTransmissionDuration;
-            }
-
-            int32_t ulPacketLost = int32_t(ulPacketTransmitted) - int32_t(ulPacketReceived);
-            if (ulPacketLost < 0)
-            {
-                ulPacketLost = 0;
-            }
-
-            if (ulPacketTransmitted > 0)
-            {
-                std::string color = (ulPacketLost == 0) ? "\033[92m" : "\033[91m";
-                std::cout << color << "UE " << std::setw(2) << ueCount
-                          << " | Uplink   | Succeeded: " << std::setw(4) << ulPacketReceived
-                          << "| Lost: " << std::setw(3) << ulPacketLost
-                          << " | Duration: " << ulTransmissionDuration.GetMilliSeconds() << "ms"
-                          << "\033[0m\n";
-            }
+            const uint32_t index = ueCount * appsPerUe;
+            printLink(ueCount,
+                      "Downlink",
+                      commonParams.appDlTransport == "UDP",
+                      DynamicCast<IbOranTransmissionApplication>(txApps.Get(index)),
+                      DynamicCast<IbOranReceptionApplication>(rxApps.Get(index)),
+                      dlAppDuration);
+        }
+        if (commonParams.appUlEnable)
+        {
+            const uint32_t index = ueCount * appsPerUe + (commonParams.appDlEnable ? 1 : 0);
+            printLink(ueCount,
+                      "Uplink  ",
+                      commonParams.appUlTransport == "UDP",
+                      DynamicCast<IbOranTransmissionApplication>(txApps.Get(index)),
+                      DynamicCast<IbOranReceptionApplication>(rxApps.Get(index)),
+                      ulAppDuration);
         }
     }
     std::cout << std::endl;
-    std::cout << "ib-ORAN " << ratType << " Environment: Downlink flow finished in "
-              << dlAppDuration.GetSeconds() << "s.\n";
-    std::cout << "ib-ORAN " << ratType << " Environment: Uplink flow finished in "
-              << ulAppDuration.GetSeconds() << "s.";
+    std::cout << "ib-ORAN " << ratType << " Environment: Downlink receptions took "
+              << dlAppDuration.GetSeconds() << "s in total.\n";
+    std::cout << "ib-ORAN " << ratType << " Environment: Uplink receptions took "
+              << ulAppDuration.GetSeconds() << "s in total.";
 }
 
 // == ANIMATION FUNCTIONS =============================================

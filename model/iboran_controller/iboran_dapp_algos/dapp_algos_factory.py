@@ -40,7 +40,6 @@ _FAMILIES = {
 }
 
 _VALID_METRICS = {"Cqi", "BufferLevel", "PropFairness", "Criticality", "MultiCriteria"}
-_RL_ALGOS = {"NeuralLinUCB"}
 
 BASE_DAPP_ALGOS_KEYS = set(_STANDALONE) | {
     f"{family}{metric}" for family in _FAMILIES for metric in _VALID_METRICS

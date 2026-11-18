@@ -184,6 +184,9 @@ main(int argc, char* argv[])
     RngSeedManager::SetSeed(1);
     RngSeedManager::SetRun(commonParams.rngRun);
 
+    // TCP minimum retransmission timeout, as in Linux (ns-3 default: 1 s)
+    Config::SetDefault("ns3::TcpSocketBase::MinRto", TimeValue(MilliSeconds(200)));
+
     // -- LTE AND EPC INITIALIZATION --------------------------------------------
     /**
      * Topology:
@@ -328,10 +331,10 @@ main(int argc, char* argv[])
     if (IsGbrBearer(qci))
     {
         GbrQosInformation gbrQos;
-        gbrQos.gbrDl = commonParams.dlBitRate;
-        gbrQos.gbrUl = commonParams.ulBitRate;
-        gbrQos.mbrDl = commonParams.dlBitRate * 1.2;
-        gbrQos.mbrUl = commonParams.ulBitRate * 1.2;
+        gbrQos.gbrDl = commonParams.appDlBitRate;
+        gbrQos.gbrUl = commonParams.appUlBitRate;
+        gbrQos.mbrDl = commonParams.appDlBitRate * 1.2;
+        gbrQos.mbrUl = commonParams.appUlBitRate * 1.2;
         bearer = EpsBearer(static_cast<EpsBearer::Qci>(qci), gbrQos);
     }
     else

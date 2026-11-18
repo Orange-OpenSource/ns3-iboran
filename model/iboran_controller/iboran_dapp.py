@@ -27,7 +27,6 @@ from model.iboran_interfaces.iboran_shm_protocol import (
     LinkDirection,
     RatType,
     MessageType,
-    ProtocolLimits,
 )
 from model.iboran_controller.iboran_controller import IbOranController
 from model.utils.file_store import FileStore
@@ -110,15 +109,18 @@ class IbOranDApp(IbOranController):
     def _reset_variables(self) -> None:
         self._reset_common_variables()
 
-        self.store = FileStore(
+        store = FileStore(
             script_dir=os.path.dirname(os.path.abspath(__file__)),
             folder_name="../../notebook/logs/dapp_logs",
             log_name=f"dApp{self.app_id}.log",
         )
+        self.store = None
         if self.save_log:
+            self.store = store
             self.store.overwrite(f"RAT Type: {self.rat_type}\n\n")
         else:
-            self.store.remove()
+            # a run without the log removes the log of an earlier run
+            store.remove(prune_dir=True)
 
         self._e3_control = self._per_link(E3Control)
         for ctrl in self._e3_control.values():

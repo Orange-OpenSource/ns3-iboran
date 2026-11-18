@@ -15,8 +15,10 @@ UEs carry payloads in the format set with `--data_format`:
 
 When the embeddings of a dataset are missing, the first run with `EMBEDDING` extracts and stores them.
 
+The application layer detects the content type of each file and sends each payload as a framed message, so the receiver can place lost bytes (see [content types](application.md#content-types)).
+
 > [!NOTE]
-> The `VIDEO` and `TEXT` formats are under development.
+> The application layer already handles `VIDEO` and `TEXT` payloads (see [content types](application.md#content-types)), but these formats have no KPI module yet.
 
 ### Datasets
 
@@ -40,7 +42,7 @@ The embedding models are downloaded to `notebook/models/emb/` on first use.
 
 ### Object IDs and intents
 
-Each UE is assigned one object ID drawn uniformly from `--oid_range`, seeded by `--rng_run`. The intent of each link direction is drawn from the same range with the same seed. A UE is intent-relevant on a link when its object ID matches the intent of that link. A narrow range keeps at least one intent-relevant UE per link in most replications. A link with no intent-relevant UE reports a [`SatisfactionScore`](kpis.md#intent-based-kpis) of NaN, which campaign averages skip.
+Each UE is assigned one object ID drawn uniformly from `--oid_range`, seeded by `--rng_run`. The intent of each link direction is drawn from the same range with the same seed. A UE is intent-relevant on a link when its object ID matches the intent of that link. A narrow range keeps at least one intent-relevant UE per link in most replications. A link with no intent-relevant UE reports a [`SatisfactionScore`](kpis.md#intent-based-kpis) of 0.
 
 ## Outputs
 
@@ -49,11 +51,14 @@ Each UE is assigned one object ID drawn uniformly from `--oid_range`, seeded by 
 | Run statistics and KPI summary | Console | With `--verbose=true` |
 | KPIs of the run (see [KPIs](kpis.md)) | `notebook/logs/kpi.json` | Always |
 | Merged run configuration, read by ns-3 | `notebook/logs/runConfig.yaml` | Always |
-| dApp control log | `notebook/logs/` | With `--save_dapp_log=true` |
+| dApp control log | `notebook/logs/dapp_logs/` | With `--save_dapp_log=true` |
+| xApp control log | `notebook/logs/xapp_logs/` | With `--save_xapp_log=true` |
+| Input file of each UE and link | `notebook/logs/oidQueries.json` | Always |
+| Application message log (see [message log](application.md#message-log)) | `notebook/logs/appMessages.json` | With `appSaveMessageLog: true` |
 | Flow monitor statistics | `notebook/.flowstats/iboran-flowstats.xml` | Always |
 | Recovered payloads | `notebook/dataset_dscv/<dataset>/` | Always |
 | NetAnim animation (see [visualization](visualization.md)) | `notebook/netanim/iboran-<rat>-anim.xml` | Always |
 
 ### Cached results
 
-A [campaign](usage.md#campaign) caches the KPI records of each run in `notebook/logs/run_data/` and reuses them on the next call with the same settings. Delete this folder and `notebook/logs/checkpoints/` after any change to the simulator code, or the RAN model.
+A [campaign](usage.md#campaign) caches the KPI records of each run in `notebook/logs/run_data/` and reuses them on the next call with the same settings.

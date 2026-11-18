@@ -10,6 +10,7 @@
 
 import os
 import glob
+import json
 import re
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -79,6 +80,11 @@ _FLOW_KEYS = {
 
 LINKS = [LinkDirection.UPLINK, LinkDirection.DOWNLINK]
 
+# destination ports of the data flows (see `iboran-ran-common.cc`)
+DL_DATA_PORTS = range(2000, 4000)
+UL_DATA_PORTS = range(4000, 6000)
+TCP_PROTOCOL = 6
+
 
 class IbOranOrchestrator:
     def __init__(
@@ -94,6 +100,7 @@ class IbOranOrchestrator:
         embedder: str,
         oid_range: tuple[int, int],
         save_dapp_log: bool,
+        save_xapp_log: bool,
         save_learning_convg: bool,
         verbose: bool,
         common_params: CommonRanParams,
@@ -110,6 +117,7 @@ class IbOranOrchestrator:
         self.embedder = embedder
         self.oid_range = oid_range
         self.save_dapp_log = save_dapp_log
+        self.save_xapp_log = save_xapp_log
         self.save_learning_convg = save_learning_convg
         self.verbose = verbose
         self.common_params = common_params
@@ -138,7 +146,9 @@ class IbOranOrchestrator:
 
         self._init_paths()
 
-        self.flow_stats = FlowStatsAnalyzer(self.notebook_dir, verbose=self.verbose)
+        self.flow_stats = FlowStatsAnalyzer(
+            self.notebook_dir, verbose=self.verbose, common_params=self.common_params
+        )
 
     def execute(self, k=1) -> int:
         self.k = k  # part of the checkpoint key: a policy is trained per k
@@ -203,6 +213,7 @@ class IbOranOrchestrator:
             intents=self.intent_producer.intents,
             rat_type=self.rat_type,
             control_period_f=self.xapp_control_period_f,
+            save_log=self.save_xapp_log,
             algo_rbg_bounding=self.xapp_algo_rbg_bounding,
         )
 
@@ -233,18 +244,20 @@ class IbOranOrchestrator:
                     print(f"ib-ORAN Orchestrator: Simulation finished in {elapsed}s.")
                     break
                 cpp2Py = shm_interface.GetCpp2PyStruct()
-                shm_interface.PyRecvEnd()
 
                 # invoke the xApp and dApp schedulers
                 shm_interface.PySendBegin()
                 py2Cpp = shm_interface.GetPy2CppStruct()
+
                 self.e2_dapp_.control = self.xapp_scheduler.run(
                     cpp2Py, py2Cpp, self.e2_dapp_.report
                 )
                 self.e2_dapp_.report = self.dapp_scheduler.run(
                     cpp2Py, py2Cpp, self.e2_dapp_.control
                 )
+
                 shm_interface.PySendEnd()
+                shm_interface.PyRecvEnd()
 
         except KeyboardInterrupt:
             print("ib-ORAN Orchestrator: Interrupted by user.")
@@ -488,9 +501,15 @@ class IbOranOrchestrator:
 
 
 class FlowStatsAnalyzer:
-    def __init__(self, notebook_dir: Path, verbose: bool = False):
+    def __init__(
+        self,
+        notebook_dir: Path,
+        verbose: bool = False,
+        common_params: CommonRanParams | None = None,
+    ):
         self.notebook_dir = notebook_dir
         self.verbose = verbose
+        self.common_params = common_params
         self.link_n_flows = self._per_link(int)
 
     def compute_std_kpis(self, kpi: dict) -> None:
@@ -505,22 +524,17 @@ class FlowStatsAnalyzer:
                 jit_n=0,
                 t0=float("inf"),
                 t1=0.0,
+                tcp=False,
             )
             for l in LINKS
         }
 
         for stats, _ in self._get_flowstats():
-            if stats["sourceAddress"] == "1.0.0.2" and stats[
-                "destinationAddress"
-            ].startswith("7.0.0"):
-                link = LinkDirection.DOWNLINK
-            elif stats["destinationAddress"] == "1.0.0.2" and stats[
-                "sourceAddress"
-            ].startswith("7.0.0"):
-                link = LinkDirection.UPLINK
-            else:
-                continue
+            link = self._data_flow_link(stats)
+            if link is None:
+                continue  # core signaling, TCP acknowledgment flows
             a = agg[link]
+            a["tcp"] |= self._is_tcp(stats)
             a["tx"] += stats["txPackets"]
             a["rx"] += stats["rxPackets"]
             a["bytes"] += stats["rxBytes"]
@@ -531,6 +545,24 @@ class FlowStatsAnalyzer:
                 a["t0"] = min(a["t0"], stats["timeFirstTxPacket"])
                 a["t1"] = max(a["t1"], stats["timeLastRxPacket"])
             self.link_n_flows[link] += 1
+
+        # Over TCP, the first packet of a data flow is the SYN sent when the
+        # application starts and the last is the FIN sent when it stops, so
+        # timeFirstTxPacket and timeLastRxPacket bound the connection, not the
+        # transfer. The message log, when saved, gives the first data sent and
+        # the last data received.
+        message_log_window = self._message_log_window()
+        for link, a in agg.items():
+            if not a["tcp"] or a["t1"] <= 0:
+                continue
+            if link in message_log_window:
+                a["t0"], a["t1"] = message_log_window[link]
+            else:
+                print(
+                    f"ib-ORAN Orchestrator: {link} throughput over TCP spans the "
+                    "whole connection; set appSaveMessageLog: true to measure it "
+                    "from the first message sent to the last message received."
+                )
 
         for link, a in agg.items():
             if a["tx"] > 0:
@@ -551,12 +583,65 @@ class FlowStatsAnalyzer:
         if self.verbose:
             self._print_std_kpis(kpi)
 
+    @staticmethod
+    def _is_tcp(stats: dict) -> bool:
+        try:
+            return int(stats["protocol"]) == TCP_PROTOCOL
+        except (TypeError, ValueError):
+            return False
+
+    @staticmethod
+    def _data_flow_link(stats: dict) -> LinkDirection | None:
+        src = stats["sourceAddress"]
+        dst = stats["destinationAddress"]
+        try:
+            dport = int(stats["destinationPort"])
+        except (TypeError, ValueError):
+            return None
+        if src == "1.0.0.2" and dst.startswith("7.0.0") and dport in DL_DATA_PORTS:
+            return LinkDirection.DOWNLINK
+        if dst == "1.0.0.2" and src.startswith("7.0.0") and dport in UL_DATA_PORTS:
+            return LinkDirection.UPLINK
+        return None
+
+    def _message_log_window(self) -> dict[LinkDirection, tuple[float, float]]:
+        # read only when this run saved the log, so a file left by an earlier run is never used
+        if self.common_params is None or not getattr(
+            self.common_params, "appSaveMessageLog", False
+        ):
+            return {}
+        log_path = self.notebook_dir / "logs" / "appMessages.json"
+        try:
+            with open(log_path) as f:
+                log = json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+        windows = {}
+        for key, link in (("dl", LinkDirection.DOWNLINK), ("ul", LinkDirection.UPLINK)):
+            entries = log.get(key, {}).values()
+            first = [
+                m["firstTxNs"]
+                for entry in entries
+                for m in (entry.get("transmission") or {}).get("messages", [])
+                if m.get("firstTxNs")
+            ]
+            last = [
+                m["lastRxNs"]
+                for entry in entries
+                for m in (entry.get("reception") or {}).get("messages", [])
+                if m.get("lastRxNs")
+            ]
+            if first and last:
+                windows[link] = (min(first) / 1e9, max(last) / 1e9)
+        return windows
+
     def _print_std_kpis(self, kpi: dict) -> None:
         header = "-- Network Standard KPIs "
         print(f"\n{header:-<39}")
         for link in LINKS:
             print(f"-- {link}")
-            print(f"{'Avg PDR':<22}: {kpi['PDR'][link].measure:.2f} %")
+            print(f"{'PDR':<22}: {kpi['PDR'][link].measure:.2f} %")
             print(
                 f"{'Total throughput':<22}: {kpi['Throughput'][link].measure * self.link_n_flows[link]:.2f} kbps"
             )

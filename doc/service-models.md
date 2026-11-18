@@ -41,6 +41,7 @@ Reported by the O-DU to the Near-RT RIC. It carries radio performance indicators
 | RNTI | - | - | `uint16` |
 | CQI | - | 0–15 | `uint8` |
 | Buffer size | bytes | - | `uint32` |
+| Content ID | - | Object ID string | `char[MAX_ID_LEN]` |
 | QCI | - | 1–9 | `uint8` |
 | Achievable rate | Mbps | - | `double` |
 | Actual throughput | Mbps | - | `double` |
@@ -135,6 +136,8 @@ Reported by the MAC and RLC layers of the O-DU to the local dApp. It carries rad
 | Actual throughput | Mbps | - | `double` |
 | Total bytes served | bytes | - | `uint32` |
 | Packet delay | ms | - | `uint32` |
+
+Content criticality and content ID are published by the application of each UE (see [application layer](application.md#criticality)).
 
 ### E3SM E3 CONTROL
 

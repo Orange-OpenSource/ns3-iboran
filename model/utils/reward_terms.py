@@ -19,18 +19,12 @@ class RewardTerms:
         cfg = load_config(RUN_CONFIG_PATH)
         common = cfg.common
         self.target_mbps = {
-            LinkDirection.DOWNLINK: common.dlBitRate / 1e6,
-            LinkDirection.UPLINK: common.ulBitRate / 1e6,
+            LinkDirection.DOWNLINK: common.appDlBitRate / 1e6,
+            LinkDirection.UPLINK: common.appUlBitRate / 1e6,
         }
         self.delay_budget_ms = 140.0 if rat_type == RatType.LTE else 120.0
         self.seed = common.rngRun
         self.ue_num = common.ueNum
-        self.learning_mode = cfg.orchestrator.learning_mode
-
-    @property
-    def frozen(self) -> bool:
-        "eval: policies are fixed, no parameter update, no action sampling"
-        return self.learning_mode == "eval"
 
     def throughput(self, actual_mbps, link):
         return np.clip(actual_mbps / self.target_mbps[link], 0.0, 1.0)

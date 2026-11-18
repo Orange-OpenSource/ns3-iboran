@@ -24,7 +24,8 @@
 namespace ns3
 {
 
-// == COMMON PARAMETERS =========================================================
+// == COMMON PARAMETERS
+// =========================================================
 struct CommonRanParams
 {
     double simTime;         // simulation time [s]
@@ -45,19 +46,28 @@ struct CommonRanParams
     uint32_t backhaulMtu;      // backhaul link max transmission unit [bytes]
     double backhaulDelay;      // backhaul link delay [ms]
 
-    bool enableDlFlow;     // enable downlink data flows]
-    uint32_t dlPacketSize; // downlink packet size [bytes]
-    uint32_t dlBitRate;    // downlink bit rate [bps]
-    double dlMinInterval;  // downlink minimum inter-packet interval [ms]
-    bool dlUseUdp;         // whether to use UDP protocol instead of TCP
+    bool appDlEnable;           // enable downlink data flows
+    uint32_t appDlPacketSize;   // downlink packet size [bytes]
+    uint32_t appDlBitRate;      // downlink bit rate [bps]
+    double appDlMinInterval;    // downlink minimum inter-packet interval [s]
+    std::string appDlTransport; // UDP | TCP
 
-    bool enableUlFlow;     // enable uplink data flow
-    uint32_t ulPacketSize; // uplink packet size [bytes]
-    uint32_t ulBitRate;    // uplink bit rate [bps]
-    double ulMinInterval;  // uplink minimum inter-packet interval [ms]
-    bool ulUseUdp;         // whether to use UDP protocol instead of TCP
+    bool appUlEnable;           // enable uplink data flow
+    uint32_t appUlPacketSize;   // uplink packet size [bytes]
+    uint32_t appUlBitRate;      // uplink bit rate [bps]
+    double appUlMinInterval;    // uplink minimum inter-packet interval [s]
+    std::string appUlTransport; // UDP | TCP
 
     DataFormat dataFormat; // data format (assumed similar for uplink and downlink)
+
+    // application layer (see doc/application.md)
+    bool appFraming;                    // prepend the ib-ORAN fragment header to every packet
+    std::string appEnvelope;            // None | A2A-JSONRPC | A2A-HTTPJSON | A2A-gRPC
+    std::string appFillPolicy;          // Auto | Zero | Nan | Drop
+    bool appEmbeddingPrefixCriticality; // importance-ordered embeddings
+                                        // (Matryoshka, PCA)
+    bool appSaveAllMessages;            // also save non-primary messages
+    bool appSaveMessageLog;             // write notebook/logs/appMessages.json
 
     bool enableIbOranSchedCoreLog; // enable ib-ORAN MAC scheduler core logging
     bool enableRrcLog;             // enable RRC logging
@@ -65,7 +75,8 @@ struct CommonRanParams
     uint32_t rngRun; // ns-3 RngRun and application RNG seed
 };
 
-// == LTE PARAMETERS ============================================================
+// == LTE PARAMETERS
+// ============================================================
 struct LteParams
 {
     uint32_t dlEarfcn;         // downlink EARFCN
@@ -76,7 +87,8 @@ struct LteParams
     double p0NominalPusch;     // nominal PSD target for PUSCH [dBm]
 };
 
-// == NR PARAMETERS =============================================================
+// == NR PARAMETERS
+// =============================================================
 struct NrParams
 {
     double centralFrequency;       // central frequency [Hz]
@@ -91,7 +103,8 @@ struct NrParams
     uint32_t ueAntennaNumColumns;  // number of columns in UE antenna
 };
 
-// == MAIN CLASS ================================================================
+// == MAIN CLASS
+// ================================================================
 class SimParams
 {
   public:

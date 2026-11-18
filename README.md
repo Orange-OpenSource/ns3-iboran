@@ -13,15 +13,12 @@ LTE is simulated with an adapted version of the ns-3 `lte` module, and 5G NR wit
 ## Architecture
 
 <div align="center">
-  <img src="doc/architecture.png" alt="ib-ORAN architecture" width="65%"/>
+  <img src="doc/architecture.png" alt="ib-ORAN architecture" width="70%"/>
 </div>
 
-ib-ORAN separates the network simulation from the control logic. On one side, the network simulator, written in C++ on top of ns-3, contains the RAN functions and the E2 and E3 agents that expose them. On the other side, the dApps, the Near-RT RIC with its xApps, and the Non-RT RIC with its rApps run in Python and reach those agents through the shared-memory interface of [ns3-ai](https://github.com/hust-diangroup/ns3-ai).
+ib-ORAN separates the network simulation from the control logic. On one side, the network simulator, written in C++ on top of ns-3, contains the RAN functions and the E2 and E3 agents that expose them. On the other side, the dApps and the Near-RT RIC with its xApps run in Python and reach those agents through the shared-memory interface of [ns3-ai](https://github.com/hust-diangroup/ns3-ai). The Non-RT RIC with its rApps is planned.
 
-The Near-RT RIC uses the E2 service models E2SM-KPM, E2SM-RC and E2SM-DAPP, the dApps use the E3 service model (E3SM), and the two RICs communicate over A1. The E2-E3 bridge relays E2SM-DAPP messages between the Near-RT RIC and the dApps. The fields of each message are listed in [service models](doc/service-models.md).
-
-> [!NOTE]
-> E3 and E2SM-DAPP are not yet standardized. The other interfaces and service models follow the O-RAN Alliance specifications.
+The Near-RT RIC uses the E2 service models E2SM-KPM, E2SM-RC and E2SM-DAPP, and the dApps use the E3 service model (E3SM). The E2-E3 bridge relays E2SM-DAPP messages between the Near-RT RIC and the dApps. E2SM-KPM and E2SM-RC are modeled on the O-RAN Alliance specifications, with only the fields the apps use, while E3 and E2SM-DAPP are not standardized yet. The A1 interface between the two RICs will come with the rApps. The fields of each message are listed in [service models](doc/service-models.md).
 
 ## Installation
 
@@ -66,14 +63,14 @@ bash quick-setup.sh
 
 ## Usage
 
-The parameters, campaigns, and reproducibility are described in [usage](doc/usage.md).
+The parameters, campaigns and reproducibility are described in [usage](doc/usage.md).
 
 ### Single run
 
-A single simulation runs from `model/iboran_campaign`:
+A single simulation runs from `model/iboran_campaign`. From `contrib/iboran`:
 
 ```shell
-cd contrib/iboran/model/iboran_campaign
+cd model/iboran_campaign
 python3 iboran_run.py --rat_type="NR" --k=3 --dapp_algo_ue_selection="ibTopKCqi"
 ```
 
@@ -90,11 +87,12 @@ Each run writes its [KPIs](doc/kpis.md), logs and a NetAnim animation file to `n
 | Document | Content |
 |---|---|
 | [Installation](doc/installation.md) | Prerequisites, installation steps and troubleshooting |
-| [Usage](doc/usage.md) | Run parameters, examples, campaigns, and reproducibility |
+| [Usage](doc/usage.md) | Run parameters, examples, campaigns and reproducibility |
 | [Apps](doc/apps.md) | Implemented dApps, xApps and rApps |
 | [Algorithms](doc/algorithms.md) | dApp UE selection and xApp RBG bounding algorithms |
 | [Service models](doc/service-models.md) | Message fields of each E2 and E3 service model |
 | [Simulation data](doc/simulation-data.md) | Payload formats, datasets, embedding models and run outputs |
+| [Application layer](doc/application.md) | Content types, criticality, A2A envelope models, packet framing and reception |
 | [KPIs](doc/kpis.md) | Standard, intent-based and control KPIs |
 | [Visualization](doc/visualization.md) | Viewing runs in NetAnim |
 | [Changelog](CHANGELOG.md) | Changes in each release |
@@ -133,7 +131,7 @@ To cite the software itself:
 }
 ```
 
-## Acknowledgement
+## Acknowledgment
 
 ib-ORAN is developed within the ANR COMSEMA project, funded by the French National Research Agency (ANR).
 

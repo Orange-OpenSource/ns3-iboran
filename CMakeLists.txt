@@ -24,6 +24,14 @@ include_directories(
 )
 
 set(IBORAN_COMMON_SOURCES
+    model/iboran_application/iboran-app-content.cc
+    model/iboran_application/iboran-app-content.h
+    model/iboran_application/iboran-app-envelope.cc
+    model/iboran_application/iboran-app-envelope.h
+    model/iboran_application/iboran-app-header.cc
+    model/iboran_application/iboran-app-header.h
+    model/iboran_application/iboran-app-message.cc
+    model/iboran_application/iboran-app-message.h
     model/iboran_application/iboran-application.cc
     model/iboran_application/iboran-application.h
     model/iboran_application/iboran-side-info-tracker.cc
@@ -114,7 +122,7 @@ if(BUILD_PYTHON_BINDINGS)
                 set_target_properties(iboran_shm_structure_py_binding PROPERTIES
                     PREFIX ""
                     SUFFIX ".so"
-                    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/model//iboran_interfaces
+                    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/model/iboran_interfaces
                     CXX_VISIBILITY_PRESET "hidden"
                 )
                 

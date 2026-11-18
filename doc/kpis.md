@@ -6,19 +6,26 @@ This document defines the KPIs that ib-ORAN reports for each run. KPIs are repor
 
 | KPI | Definition | Unit |
 |---|---|---|
-| `PDR` | Received packets divided by transmitted packets, over all flows of the link | % |
-| `Throughput` | Received bits over the active period of the link (first transmission to last reception), divided by the number of flows | kbps per UE |
+| `PDR` | Received packets divided by transmitted packets, over the data flows of the link | % |
+| `Throughput` | Received bits over the active period of the link (first transmission to last reception), divided by the number of data flows | kbps per UE |
 | `Latency` | Mean delay of the received packets | ms |
 | `Jitter` | Mean packet delay variation | ms |
+
+> [!NOTE]
+> These KPIs come from the ns-3 flow monitor and count only data flows: remote host to UE port `2000 + i` (downlink) and UE to remote host port `4000 + i` (uplink), for UE index *i* from 0. Core signaling and TCP acknowledgment flows are excluded.
+>
+> They are per packet. Over TCP, a retransmission counts as an extra packet with its own delay, so the wait for recovery shows only in the [message log](application.md#message-log).
+>
+> A TCP flow starts with the SYN at application start and ends with the FIN at application stop. With `appSaveMessageLog: true`, throughput is measured from the link's earliest `firstTxNs` to its latest `lastRxNs` in the message log; otherwise over the whole connection, which is not comparable with UDP. Without the log, the orchestrator prints a warning.
 
 ## Intent-based KPIs
 
 | KPI | Definition | Unit |
 |---|---|---|
-| `FidelityScore` | Fidelity of the recovered payload of a UE to the original, computed by the KPI module of the payload format in [`model/iboran_kpi/`](../model/iboran_kpi) | - |
-| `SatisfactionScore` | Mean `FidelityScore` over the intent-relevant UEs of the link. A relevant UE without a usable output counts as 0. | - |
+| `FidelityScore` | Fidelity of the recovered payload to the original, computed per UE by the KPI module of the payload format in [`model/iboran_kpi/`](../model/iboran_kpi), and averaged over all UEs of the link (a UE without a usable output counts as 0) | - |
+| `SatisfactionScore` | Sum of the `FidelityScore` of the intent-relevant UEs, divided by the number of UEs of the link, so it never exceeds `FidelityScore` and is 0 on a link with no intent-relevant UE | - |
 
-A link with no intent-relevant UE reports a `SatisfactionScore` of NaN, which campaign averages skip (see [object IDs and intents](simulation-data.md#object-ids-and-intents)).
+Before scoring, the receiver fills the lost elements of a payload according to `appFillPolicy` (see [application layer](application.md#reception)). `kpi.json` also holds the other metrics of the KPI module, averaged over all UEs of the link in the same way.
 
 ## Control KPIs
 

@@ -32,8 +32,12 @@ _UNBOUNDED = max(ProtocolLimits.MAX_PRB_NUM_LTE, ProtocolLimits.MAX_PRB_NUM_NR)
 
 
 class IbOranXAppMacScheduler(IbOranXApp):
-    def __init__(self, intents, rat_type, control_period_f, algo_rbg_bounding):
-        super().__init__(intents, rat_type, control_period_f, app_id="MacScheduler")
+    def __init__(
+        self, intents, rat_type, control_period_f, save_log, algo_rbg_bounding
+    ):
+        super().__init__(
+            intents, rat_type, control_period_f, save_log, app_id="MacScheduler"
+        )
         self.algo_rbg_bounding = algo_rbg_bounding
 
         self._reset_variables()
@@ -78,6 +82,14 @@ class IbOranXAppMacScheduler(IbOranXApp):
         for i, (rnti, bound) in enumerate(entries):
             rc.ue[i].rnti = rnti
             rc.ue[i].maxRbgAllocation = bound
+
+            if self.save_log:
+                self.store.append(
+                    f"Control step: {self.stats.steps[link]} | "
+                    f"{'UPLINK' if link == LinkDirection.UPLINK else 'DOWNLINK'} | "
+                    f"RNTI={rnti:1d}, "
+                    f"{f'RBG bound={bound:1d}' if bound < e2KpmReport.numRbg else 'Unbounded'}\n"
+                )
 
         dc = self._e2_dapp_control[link]
         dc.skipThisStep = False

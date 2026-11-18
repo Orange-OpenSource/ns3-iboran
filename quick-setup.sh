@@ -251,6 +251,14 @@ echo -e "\n${YELLOW}[2/6] Checking source files...${NC}"
 cd "$IBORAN_DIR"
 
 REQUIRED_FILES=(
+    "model/iboran_application/iboran-app-content.h"
+    "model/iboran_application/iboran-app-content.cc"
+    "model/iboran_application/iboran-app-envelope.h"
+    "model/iboran_application/iboran-app-envelope.cc"
+    "model/iboran_application/iboran-app-header.h"
+    "model/iboran_application/iboran-app-header.cc"
+    "model/iboran_application/iboran-app-message.h"
+    "model/iboran_application/iboran-app-message.cc"
     "model/iboran_application/iboran-application.h"
     "model/iboran_application/iboran-application.cc"
     "model/iboran_application/iboran-side-info-tracker.h"
@@ -278,6 +286,7 @@ REQUIRED_FILES=(
     "model/iboran_controller/iboran_xapp_algos/xapp_algos_factory.py"
     "model/iboran_kpi/iboran_kpi.py"
     "model/iboran_kpi/iboran_kpi_iqa.py"
+    "model/iboran_kpi/iboran_kpi_ecs.py"
     "CMakeLists.txt"
 )
 
@@ -415,6 +424,7 @@ echo ""
 echo "To quickly run the simulation:"
 echo ""
 echo "  $ cd $IBORAN_RUN_DIR"
+echo "  $ source ../../../../.venv/bin/activate"
 echo "  $ python3 iboran_run.py"
 echo ""
 echo "========================================="
@@ -427,7 +437,7 @@ echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo -e "\n${YELLOW}Starting test...${NC}"
     
-    # start Python agent in background
+    # run one simulation
     python3 iboran_run.py
     
     echo -e "\n${GREEN}✓ Test completed!${NC}"

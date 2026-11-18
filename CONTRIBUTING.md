@@ -48,6 +48,7 @@ bash quick-setup.sh
 From `model/iboran_campaign`:
 
 ```shell
+source ../../../../.venv/bin/activate
 python3 iboran_run.py --rat_type="LTE" --rng_run=1
 python3 iboran_run.py --rat_type="NR" --rng_run=1
 ```
@@ -158,6 +159,8 @@ Update the documentation in the same pull request as the change:
 | New or changed message field | [service models](doc/service-models.md) |
 | New KPI | [KPIs](doc/kpis.md) |
 | New input, output or dataset | [simulation data](doc/simulation-data.md) |
+| New content type, envelope model or application-layer key | [application layer](doc/application.md) |
+| Change to the application-layer code, attributes or wire format | [developer reference](model/iboran_application/README.md) |
 | New dependency or install step | [installation](doc/installation.md) and the [README](README.md#installation) |
 | Any user-facing change | [CHANGELOG.md](CHANGELOG.md), in the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format |
 

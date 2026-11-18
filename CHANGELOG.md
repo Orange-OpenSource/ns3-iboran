@@ -7,6 +7,43 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## 3.0.0 (2026-11-18)
+
+### Added
+- Application-layer message framing: a 44-byte fragment header on every packet, reassembly at the receiver per sender and message ID, and fill policies for lost elements (`appFraming`, `appFillPolicy`).
+- Content type detection for PNG, JPEG, BMP, H.264 Annex B, MP4, float32, float16 and 1-byte embedding codes, text and JSON, with JPEG and H.264 criticality maps.
+- `SendMessage()` on the transmission application, and `TxMessage` and `RxMessage` trace sources.
+- Saving of every received message (`appSaveAllMessages`) and a per-message transmission and reception log in `notebook/logs/appMessages.json` (`appSaveMessageLog`), with the payload ranges lost in each message.
+- `doc/application.md`, and a developer reference in `model/iboran_application/README.md`.
+- xApp control log in `notebook/logs/xapp_logs/` (`--save_xapp_log`).
+
+### Changed
+- Breaking: link traffic keys in `common` renamed with the `app` prefix: `enableDlFlow` to `appDlEnable`, `dlPacketSize` to `appDlPacketSize`, `dlBitRate` to `appDlBitRate`, and `dlUseUdp` to `appDlTransport`, which takes `"UDP"` or `"TCP"` instead of a boolean; the same for uplink. Configuration files with the old keys load without error, but the keys are ignored and the defaults apply.
+- Breaking: `PacketSize` and `BitRateBps` include the fragment header; with `appFraming: true` a 512-byte packet carries 468 payload bytes. Results differ from earlier versions; `appFraming: false` restores the previous transfer.
+- `MinPacketInterval` attribute is a `Time` instead of an integer in milliseconds, so the interval computed from packet size and bit rate is no longer truncated to 0.
+- UDP packets are capped at `MaxDatagramSize` (1472 bytes) to avoid IP fragmentation.
+- TCP minimum retransmission timeout set to 200 ms, as in Linux, instead of the ns-3 default of 1 s; a lost segment that fast retransmit cannot recover now delays its message by about 200 ms instead of 1 s.
+- Default dataset in `iboranConfig.yaml` changed from Market-1501 to `toy`, with `CLIP` embeddings, so a fresh clone runs without downloading a dataset.
+- Default link bit rates set to 2 Mbps downlink and 1 Mbps uplink.
+- Default NR bandwidth set to 10 MHz, so UEs compete for resources.
+
+### Removed
+- `dlTxRepeat` and `ulTxRepeat`: the transmission application sends the loaded file once. Configuration files that still set them load without error; the keys are ignored.
+
+### Fixed
+- Lost UDP packets shifted every later byte of the payload, so `FidelityScore` compared misaligned embedding dimensions.
+- JPEG inputs were parsed with the PNG chunk parser.
+- The content ID was not republished when the RNTI changed after a handover.
+- `IMAGE` outputs were saved as `.png` while the KPI step looked for the dataset's `input_image_format`, so `IMAGE` runs on Market-1501 were not scored.
+- `PrintApplicationStats` matched applications to the wrong UE and link direction when both links were enabled, and read past the application container with the uplink only. It now numbers UEs from 1, as the other outputs do.
+- Standard KPIs counted core-network signaling and TCP acknowledgment flows; they now count only the data flows of each link.
+- Over TCP, throughput ran from the SYN at application start to the FIN at application stop; with `appSaveMessageLog: true` it now runs from the link's first message sent to its last message received, and without the log the orchestrator prints a warning.
+- `transmissionMode` is the ns-3 index counted from 0, so the default `2` is TM3 (open-loop spatial multiplexing); the configuration comments gave 3GPP numbers, and values outside 0 to 6 are now rejected.
+
+### Known issues
+- With NR, uplink results may differ between two runs with the same parameters and `--rng_run`. The variation also occurs with the stock 5G-LENA scheduler and is under investigation.
+
+
 ## 2.2.1 (2026-11-07)
 
 ### Added
@@ -96,7 +133,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 <!-- Add future releases above this line in the format:
 
-## [X.Y.Z] — YYYY-MM-DD
+## X.Y.Z (YYYY-MM-DD)
 
 ### Added
 ### Changed
@@ -104,6 +141,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Removed
 ### Fixed
 ### Security
+### Known issues
 ### License  ← use this section if the license changes
 
 -->

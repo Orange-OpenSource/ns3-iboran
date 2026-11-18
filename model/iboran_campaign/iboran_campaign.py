@@ -47,6 +47,7 @@ class IbOranCampaign:
         embedder,
         oid_range,
         save_dapp_log,
+        save_xapp_log,
         save_learning_convg=False,
         verbose=False,
         n_pretrain_runs=1,
@@ -59,6 +60,7 @@ class IbOranCampaign:
         self.embedder = embedder
         self.oid_range = oid_range
         self.save_dapp_log = save_dapp_log
+        self.save_xapp_log = save_xapp_log
         self.save_learning_convg = save_learning_convg
         self.verbose = verbose
         self.n_pretrain_runs = n_pretrain_runs
@@ -209,14 +211,15 @@ class IbOranCampaign:
                 f"--k={k}",
                 f"--dapp_algo_ue_selection={dapp_algo_ue_selection}",
                 f"--xapp_algo_rbg_bounding={xapp_algo_rbg_bounding}",
+                "--learning_mode=eval",
                 f"--dataset_id={self.dataset_id}",
                 f"--data_format={self.data_format}",
                 f"--embedder={self.embedder}",
                 f"--oid_range={','.join(map(str, self.oid_range))}",
                 f"--save_dapp_log={'true' if self.save_dapp_log else 'false'}",
+                f"--save_xapp_log={'true' if self.save_xapp_log else 'false'}",
                 f"--save_learning_convg={'true' if self.save_learning_convg else 'false'}",
                 f"--verbose={'true' if self.verbose else 'false'}",
-                "--learning_mode=eval",
                 f"--rng_run={mc_idx + 1}",
             ],
             capture_output=not self.verbose,
@@ -281,13 +284,14 @@ class IbOranCampaign:
                     f"--k={k}",
                     f"--dapp_algo_ue_selection={dapp_algo}",
                     f"--xapp_algo_rbg_bounding={xapp_algo}",
+                    "--learning_mode=train",
                     f"--dataset_id={self.dataset_id}",
                     f"--data_format={self.data_format}",
                     f"--embedder={self.embedder}",
                     f"--oid_range={','.join(map(str, self.oid_range))}",
-                    "--learning_mode=train",
                     f"--rng_run={10_000 + r}",  # disjoint from eval runs 1..mc
                     "--save_dapp_log=false",
+                    "--save_xapp_log=false",
                     f"--save_learning_convg={'true' if self.save_learning_convg else 'false'}",
                     "--verbose=false",
                 ],

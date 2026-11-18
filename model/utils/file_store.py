@@ -43,9 +43,13 @@ class FileStore:
         with open(self.log_filename, "a") as log_file:
             log_file.write(content)
 
-    def remove(self):
+    def remove(self, prune_dir=False):
+        "Remove the file; with prune_dir, also remove its folder if left empty."
         if os.path.isfile(self.log_filename):
             os.remove(self.log_filename)
+        log_folder = os.path.dirname(self.log_filename)
+        if prune_dir and os.path.isdir(log_folder) and not os.listdir(log_folder):
+            os.rmdir(log_folder)
 
     def json_dump(self, content):
         with open(self.log_filename, "w") as file:

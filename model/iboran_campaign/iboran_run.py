@@ -46,6 +46,7 @@ def main():
         embedder=cfg.orchestrator.embedder,
         oid_range=cfg.orchestrator.oid_range,
         save_dapp_log=cfg.orchestrator.save_dapp_log,
+        save_xapp_log=cfg.orchestrator.save_xapp_log,
         save_learning_convg=cfg.orchestrator.save_learning_convg,
         verbose=cfg.orchestrator.verbose,
         common_params=cfg.common,
@@ -87,6 +88,7 @@ def _collect_cli_overrides(args) -> dict:
         "embedder",
         "oid_range",
         "save_dapp_log",
+        "save_xapp_log",
         "save_learning_convg",
         "verbose",
     ]
@@ -155,7 +157,7 @@ def _config_args():
     )
     parser.add_argument("--dataset_id", default=None, help="Identifier of the dataset")
     parser.add_argument("--data_format", default=None, help="Application data format")
-    parser.add_argument("--embedder", default=None, help="Emedding extraction model")
+    parser.add_argument("--embedder", default=None, help="Embedding extraction model")
     parser.add_argument(
         "--oid_range",
         type=lambda s: tuple(int(x) for x in s.split(",")),
@@ -167,6 +169,12 @@ def _config_args():
         type=_str2bool,
         default=None,
         help="Save dApp control log to file",
+    )
+    parser.add_argument(
+        "--save_xapp_log",
+        type=_str2bool,
+        default=None,
+        help="Save xApp control log to file",
     )
     parser.add_argument(
         "--save_learning_convg",

@@ -28,7 +28,6 @@ _STANDALONE = {
 _FAMILIES = {}
 
 _VALID_METRICS = {}
-_RL_ALGOS = {"PPO"}
 
 BASE_XAPP_ALGOS_KEYS = set(_STANDALONE) | {
     f"{family}{metric}" for family in _FAMILIES for metric in _VALID_METRICS

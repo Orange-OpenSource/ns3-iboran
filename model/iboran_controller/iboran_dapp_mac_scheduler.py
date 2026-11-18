@@ -97,7 +97,7 @@ class IbOranDAppMacScheduler(IbOranDApp):
             if self.save_log:
                 self.store.append(
                     f"Control step: {self.stats.steps[link]} | "
-                    f"{link} | "
+                    f"{'UPLINK' if link == LinkDirection.UPLINK else 'DOWNLINK'} | "
                     f"No allocations made.\n"
                 )
         else:
@@ -138,7 +138,7 @@ class IbOranDAppMacScheduler(IbOranDApp):
                 if self.save_log:
                     self.store.append(
                         f"Control step: {self.stats.steps[link]} | "
-                        f"{link} | "
+                        f"{'UPLINK' if link == LinkDirection.UPLINK else 'DOWNLINK'} | "
                         f"RNTI={rnti:1d}, "
                         f"{'PRBs' if e3Indication.rbgSize == 1 else 'RBGs'}="
                         f"[{self.start_rbg_k[i]}-{self.start_rbg_k[i]+self.allocated_rbg_k[i]-1}], "

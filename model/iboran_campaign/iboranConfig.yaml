@@ -34,15 +34,23 @@ common:
   backhaulMtu: 1500             # [bytes]
   backhaulDelay: 10.0           # [ms]
 
-  enableDlFlow: true
-  dlPacketSize: 512             # [bytes]
-  dlBitRate: 2000000            # [bps]
-  dlUseUdp: true
+  appDlEnable: true
+  appDlPacketSize: 512                  # [bytes], fragment header included
+  appDlBitRate: 2000000                 # [bps], fragment header included
+  appDlTransport: "TCP"                 # UDP | TCP
 
-  enableUlFlow: true
-  ulPacketSize: 512             # [bytes]
-  ulBitRate: 1000000            # [bps]
-  ulUseUdp: true
+  appUlEnable: true
+  appUlPacketSize: 512                  # [bytes], fragment header included
+  appUlBitRate: 1000000                 # [bps], fragment header included
+  appUlTransport: "TCP"                 # UDP | TCP
+
+  appFraming: true                      # 44-byte fragment header per packet;
+                                        # false = original raw transfer, no loss localization
+  appEnvelope: "None"                   # None | A2A-JSONRPC | A2A-HTTPJSON | A2A-gRPC
+  appEmbeddingPrefixCriticality: false  # earlier embedding dims more critical (Matryoshka, PCA)
+  appFillPolicy: "Auto"                 # lost elements: Auto (NaN for float embeddings) | Zero | Nan | Drop
+  appSaveAllMessages: false             # also save messages other than the file as <stem>_m<id><ext>
+  appSaveMessageLog: false              # per-message transmission and reception log in notebook/logs/appMessages.json
 
   enableIbOranSchedCoreLog: false
   enableRrcLog: false
@@ -58,20 +66,20 @@ lte:
   # NOTE: since RbNum=100 is the default assumed by the fading traces,
   # do not change it unless also changing the fading model (see MAX_PRB_NUM_LTE).
   transmissionMode: 2
-  # 3GPP transmission modes (TMs):
-  #   TM1 -> SISO, 1x1 antenna, single layer
-  #   TM2 -> Closed-loop 2x2 MIMO, 2 layers, uses UE feedback (CQI/PMI/RI)
-  #   TM3 -> Open-loop 2x2 MIMO, 2 layers, fixed precoding (no feedback)
-  #   TM4 -> Closed-loop rank-1 precoding, 2x2 MIMO, single layer, UE feedback
-  #   TM5 -> Multi-user MIMO, 2x2 MIMO, serves multiple UEs on same resources
-  #   TM6 -> Closed-loop SU-MIMO with rank adaptation, 2x2 MIMO
-  #   TM7 -> Advanced 4x2 MIMO, multiple UEs, advanced precoding
-  # NOTE: in ns-3.42, TM1-TM3 are fully implemented; TM4-TM7 may be limited.
+  # ns-3 index of the 3GPP transmission mode (TM), counted from 0:
+  #   0 -> TM1: single antenna port (SISO)
+  #   1 -> TM2: transmit diversity
+  #   2 -> TM3: open-loop spatial multiplexing
+  #   3 -> TM4: closed-loop spatial multiplexing
+  #   4 -> TM5: multi-user MIMO
+  #   5 -> TM6: closed-loop single-layer precoding
+  #   6 -> TM7: single-layer beamforming (antenna port 5)
+  # See the ns-3 LTE documentation for how each mode is modeled.
   p0NominalPusch: -96.0   # [dBm] -- urban macrocell: -96 to -106
 
 nr:
   centralFrequency: 3.5e9   # [Hz] -- 28e9 (mmWave) or 3.5e9 (sub-6 GHz)
-  bandwidth: 10e6           # [Hz]
+  bandwidth: 10e6           # [Hz] -- narrow on purpose so UEs compete; n78 allows 10-100 MHz
   numCc: 1
   numBwp: 1
   numerology: 1
@@ -94,18 +102,18 @@ nr:
 # ============================================================
 
 orchestrator:
-  k: 1                                # max parallel UEs scheduled per TTI/slot
-  dapp_control_period_sf: 1           # dApp control period [subframes]
-  xapp_control_period_f: 1            # xApp control period [frames]
-  dapp_algo_ue_selection: "Random"    # see doc/algos.md
-  xapp_algo_rbg_bounding: "Bypass"    # see doc/algos.md
-  dataset_id: "toy"                   # "toy" | "market-1501"
-  data_format: "EMBEDDING"            # "IMAGE" | "VIDEO" | "EMBEDDING" | "TEXT"
-  embedder: "CLIP"                    # "TransReID" | "CLIP"
-  oid_range: [4, 5]                   # [low, high], inclusive range of object IDs
-  save_dapp_log: false
-  save_learning_convg: false          # NOTE: learning-based algos will be released in an upcoming version
-  verbose: true
+  k: 1                                  # max parallel UEs scheduled per TTI/slot
+  dapp_control_period_sf: 1             # dApp control period [subframes]
+  xapp_control_period_f: 1              # xApp control period [frames]
+  dapp_algo_ue_selection: "Random"      # see doc/algorithms.md
+  xapp_algo_rbg_bounding: "Bypass"      # see doc/algorithms.md
+  dataset_id: "toy"                     # "toy" | "market-1501"
+  data_format: "EMBEDDING"              # "IMAGE" | "EMBEDDING"
+  embedder: "CLIP"                      # "TransReID" | "CLIP"
+  oid_range: [4, 5]                     # [low, high], inclusive range of object IDs
+  save_dapp_log: false                  # save dApp log to notebook/logs/dapp_logs/dApp<id>.log
+  save_xapp_log: false                  # save xApp log to notebook/logs/xapp_logs/xApp<id>.log
+  verbose: true                         # verbose logging to console
 
 # ============================================================
 # Datasets Configuration

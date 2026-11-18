@@ -28,23 +28,11 @@ namespace
 ns3::DataFormat
 StringToDataFormat(const std::string& str)
 {
-    if (str == "IMAGE")
+    ns3::DataFormat format;
+    if (ns3::ParseDataFormat(str, format))
     {
-        return ns3::DataFormat::IMAGE;
+        return format;
     }
-    if (str == "VIDEO")
-    {
-        return ns3::DataFormat::VIDEO;
-    }
-    if (str == "EMBEDDING")
-    {
-        return ns3::DataFormat::EMBEDDING;
-    }
-    if (str == "TEXT")
-    {
-        return ns3::DataFormat::TEXT;
-    }
-
     NS_LOG_ERROR("Unknown data format string '" << str << "'. Defaulting to EMBEDDING.");
     return ns3::DataFormat::EMBEDDING;
 }
@@ -72,29 +60,33 @@ SimParams::SimParams()
     common.xnbTxPower = 46.0;
     /* Urban macrocell: 46 [dBm] , micro/pico-cell: 30–33 [dBm].*/
     common.compensationFactor = 0.8;
-    /* Urban macrocell: (0.7-0.8; small cell: (0.4-0.6) */
+    /* Urban macrocell: 0.7-0.8; small cell: 0.4-0.6 */
 
     common.backhaulDataRate = DataRate("100Gbps");
     common.backhaulMtu = 1500;
     common.backhaulDelay = 10.0;
 
-    common.enableDlFlow = true;
-    common.dlPacketSize = 512;
-    common.dlBitRate = 200e3;
-    common.dlMinInterval = 0.0;
-    common.dlUseUdp = true;
+    common.appDlEnable = true;
+    common.appDlPacketSize = 512;
+    common.appDlBitRate = 2e6;
+    common.appDlMinInterval = 0.0;
+    common.appDlTransport = "TCP";
 
-    common.enableUlFlow = true;
-    common.ulPacketSize = 512;
-    common.ulBitRate = 100e3;
-    common.ulMinInterval = 0.0;
-    common.ulUseUdp = true;
+    common.appUlEnable = true;
+    common.appUlPacketSize = 512;
+    common.appUlBitRate = 1e6;
+    common.appUlMinInterval = 0.0;
+    common.appUlTransport = "TCP";
 
-    // Safety-net default: previously left uninitialized (undefined
-    // behavior on read) unless LoadDataFormatFromFile happened to run
-    // first. LoadFromYaml overrides this from the config file's
-    // `orchestrator.data_format` key when present.
-    common.dataFormat = DataFormat::IMAGE;
+    // overridden by orchestrator.data_format in LoadFromYaml
+    common.dataFormat = DataFormat::EMBEDDING;
+
+    common.appFraming = true;
+    common.appEnvelope = "None";
+    common.appEmbeddingPrefixCriticality = false;
+    common.appFillPolicy = "Auto";
+    common.appSaveAllMessages = false;
+    common.appSaveMessageLog = false;
 
     common.enableIbOranSchedCoreLog = false;
     common.enableRrcLog = false;
@@ -108,29 +100,27 @@ SimParams::SimParams()
     lte.dlRbNum = 100; // 100 RBs: 20 MHz bandwidth
     lte.ulRbNum = 100; // 100 RBs: 20 MHz bandwidth
     /*
-     * Since 'RbNum'=100 is considered default for fadding traces,
-     * it must not be changed as far as we use the same fading model.
-     * Also, define as 'MAX_PRB_NUM_LTE'
+     * RbNum = 100 is assumed by the fading traces; do not change it
+     * unless the fading model changes too (see MAX_PRB_NUM_LTE).
      */
     lte.transmissionMode = 2;
     /*
-     * 3GPP transmission modes (TMs):
-     * TM1 -> SISO, 1x1 antenna, single layer
-     * TM2 -> Closed-loop 2x2 MIMO, 2 layers, uses UE feedback (CQI/PMI/RI) for precoding
-     * TM3 -> Open-loop 2x2 MIMO, 2 layers, fixed precoding (no feedback)
-     * TM4 -> Closed-loop rank 1 precoding, 2x2 MIMO, single layer, uses UE feedback
-     * TM5 -> Multi-user MIMO, 2x2 MIMO, serves multiple UEs on same resources
-     * TM6 -> Closed-loop SU-MIMO with rank adaptation, 2x2 MIMO, layers adapted per UE
-     * TM7 -> Advanced 4x2 MIMO, multiple UEs, advanced precoding
-     * Note: In ns-3.42, TM1–TM3 are fully implemented; TM4–TM7 may have limited support.
+     * ns-3 index of the 3GPP transmission mode (TM), counted from 0:
+     *   0 -> TM1: single antenna port (SISO)
+     *   1 -> TM2: transmit diversity
+     *   2 -> TM3: open-loop spatial multiplexing
+     *   3 -> TM4: closed-loop spatial multiplexing
+     *   4 -> TM5: multi-user MIMO
+     *   5 -> TM6: closed-loop single-layer precoding
+     *   6 -> TM7: single-layer beamforming (antenna port 5)
      */
     lte.p0NominalPusch = -96.0;
-    /* Urban macrocell:  = (−96 to −106) [dBm] */
+    /* Urban macrocell: -96 to -106 dBm */
 
     // -- NR Parameters --------------------------------------------------
     nr.centralFrequency = 3.5e9;
     /* 28 GHz (mmWave) or 3.5e9 (sub-6 GHz) */
-    nr.bandwidth = 100e6;
+    nr.bandwidth = 10e6;
     nr.numCc = 1;
     nr.numBwp = 1;
     nr.numerology = 1;
@@ -144,7 +134,8 @@ SimParams::SimParams()
      * 5 -> 480 kHz SCS
      * 6 -> 960 kHz SCS
      */
-    // NOTE changing numerology, bandwidth, and freq. requires modifying 'MAX_PRB_NUM_NR'
+    // NOTE changing numerology, bandwidth, and freq. requires modifying
+    // 'MAX_PRB_NUM_NR'
 
     nr.tddPattern = "DL|DL|DL|DL|F|UL|UL|UL|UL|F|";
     /**
@@ -261,38 +252,63 @@ SimParams::LoadFromYaml(const std::string& filepath)
             common.backhaulDelay = c["backhaulDelay"].as<double>();
         }
 
-        if (c["enableDlFlow"])
+        if (c["appDlEnable"])
         {
-            common.enableDlFlow = c["enableDlFlow"].as<bool>();
+            common.appDlEnable = c["appDlEnable"].as<bool>();
         }
-        if (c["dlPacketSize"])
+        if (c["appDlPacketSize"])
         {
-            common.dlPacketSize = c["dlPacketSize"].as<uint32_t>();
+            common.appDlPacketSize = c["appDlPacketSize"].as<uint32_t>();
         }
-        if (c["dlBitRate"])
+        if (c["appDlBitRate"])
         {
-            common.dlBitRate = c["dlBitRate"].as<uint32_t>();
+            common.appDlBitRate = c["appDlBitRate"].as<uint32_t>();
         }
-        if (c["dlUseUdp"])
+        if (c["appDlTransport"])
         {
-            common.dlUseUdp = c["dlUseUdp"].as<bool>();
+            common.appDlTransport = c["appDlTransport"].as<std::string>();
         }
 
-        if (c["enableUlFlow"])
+        if (c["appUlEnable"])
         {
-            common.enableUlFlow = c["enableUlFlow"].as<bool>();
+            common.appUlEnable = c["appUlEnable"].as<bool>();
         }
-        if (c["ulPacketSize"])
+        if (c["appUlPacketSize"])
         {
-            common.ulPacketSize = c["ulPacketSize"].as<uint32_t>();
+            common.appUlPacketSize = c["appUlPacketSize"].as<uint32_t>();
         }
-        if (c["ulBitRate"])
+        if (c["appUlBitRate"])
         {
-            common.ulBitRate = c["ulBitRate"].as<uint32_t>();
+            common.appUlBitRate = c["appUlBitRate"].as<uint32_t>();
         }
-        if (c["ulUseUdp"])
+        if (c["appUlTransport"])
         {
-            common.ulUseUdp = c["ulUseUdp"].as<bool>();
+            common.appUlTransport = c["appUlTransport"].as<std::string>();
+        }
+
+        if (c["appFraming"])
+        {
+            common.appFraming = c["appFraming"].as<bool>();
+        }
+        if (c["appEnvelope"])
+        {
+            common.appEnvelope = c["appEnvelope"].as<std::string>();
+        }
+        if (c["appEmbeddingPrefixCriticality"])
+        {
+            common.appEmbeddingPrefixCriticality = c["appEmbeddingPrefixCriticality"].as<bool>();
+        }
+        if (c["appFillPolicy"])
+        {
+            common.appFillPolicy = c["appFillPolicy"].as<std::string>();
+        }
+        if (c["appSaveAllMessages"])
+        {
+            common.appSaveAllMessages = c["appSaveAllMessages"].as<bool>();
+        }
+        if (c["appSaveMessageLog"])
+        {
+            common.appSaveMessageLog = c["appSaveMessageLog"].as<bool>();
         }
 
         if (c["enableIbOranSchedCoreLog"])
@@ -389,8 +405,17 @@ SimParams::LoadFromYaml(const std::string& filepath)
     }
 
     // recalculate dependent values now that packet size / bit rate are loaded
-    common.dlMinInterval = common.dlPacketSize * 8.0 / common.dlBitRate;
-    common.ulMinInterval = common.ulPacketSize * 8.0 / common.ulBitRate;
+    common.appDlMinInterval = common.appDlPacketSize * 8.0 / common.appDlBitRate;
+    common.appUlMinInterval = common.appUlPacketSize * 8.0 / common.appUlBitRate;
+
+    for (std::string* transport : {&common.appDlTransport, &common.appUlTransport})
+    {
+        if (*transport != "UDP" && *transport != "TCP")
+        {
+            NS_LOG_ERROR("Unknown transport '" << *transport << "', using TCP");
+            *transport = "TCP";
+        }
+    }
 }
 
 std::ostream&
@@ -430,41 +455,43 @@ operator<<(std::ostream& os, const SimParams& params)
        << " bytes\n"
        << std::setw(30) << "Backhaul Delay" << ": " << std::setw(1) << commonParams.backhaulDelay
        << " ms\n"
-       << std::setw(30) << "Downlink Flow" << ": " << std::setw(1)
-       << (commonParams.enableDlFlow ? "Enabled" : "Disabled") << "\n"
-       << std::setw(30) << "Downlink Data Format" << ": " << std::setw(1)
-       << (commonParams.dataFormat == DataFormat::IMAGE       ? "IMAGE"
-           : commonParams.dataFormat == DataFormat::VIDEO     ? "VIDEO"
-           : commonParams.dataFormat == DataFormat::EMBEDDING ? "EMBEDDING"
-           : commonParams.dataFormat == DataFormat::TEXT      ? "TEXT"
-                                                              : "UNKNOWN")
+       << std::setw(30) << "App Downlink" << ": " << std::setw(1)
+       << (commonParams.appDlEnable ? "Enabled" : "Disabled") << "\n"
+       << std::setw(30) << "App Downlink Data Format" << ": " << std::setw(1)
+       << DataFormatToString(commonParams.dataFormat) << "\n"
+       << std::setw(30) << "App Downlink Packet Size" << ": " << std::setw(1)
+       << commonParams.appDlPacketSize << " bytes\n"
+       << std::setw(30) << "App Downlink Bit Rate" << ": " << std::setw(1)
+       << commonParams.appDlBitRate / 1e3 << " kbps\n"
+       << std::setw(30) << "App Downlink Min Interval" << ": " << std::setw(1)
+       << commonParams.appDlMinInterval * 1e3 << " ms\n"
+       << std::setw(30) << "App Downlink Transport" << ": " << std::setw(1)
+       << (commonParams.appDlTransport) << "\n"
+       << std::setw(30) << "App Uplink" << ": " << std::setw(1)
+       << (commonParams.appUlEnable ? "Enabled" : "Disabled") << "\n"
+       << std::setw(30) << "App Uplink Data Format" << ": " << std::setw(1)
+       << DataFormatToString(commonParams.dataFormat) << "\n"
+       << std::setw(30) << "App Uplink Packet Size" << ": " << std::setw(1)
+       << commonParams.appUlPacketSize << " bytes\n"
+       << std::setw(30) << "App Uplink Bit Rate" << ": " << std::setw(1)
+       << commonParams.appUlBitRate / 1e3 << " kbps\n"
+       << std::setw(30) << "App Uplink Min Interval" << ": " << std::setw(1)
+       << commonParams.appUlMinInterval * 1e3 << " ms\n"
+       << std::setw(30) << "App Uplink Transport" << ": " << std::setw(1)
+       << (commonParams.appUlTransport) << "\n"
+       << std::setw(30) << "App Framing" << ": " << std::setw(1)
+       << (commonParams.appFraming ? "Enabled" : "Disabled") << "\n"
+       << std::setw(30) << "App Envelope" << ": " << std::setw(1) << commonParams.appEnvelope
        << "\n"
-       << std::setw(30) << "Downlink Packet Size" << ": " << std::setw(1)
-       << commonParams.dlPacketSize << " bytes\n"
-       << std::setw(30) << "Downlink Bit Rate" << ": " << std::setw(1)
-       << commonParams.dlBitRate / 1e6 << " Mbps\n"
-       << std::setw(30) << "Downlink Min Packet Interval" << ": " << std::setw(1)
-       << commonParams.dlMinInterval * 1e3 << " ms\n"
-       << std::setw(30) << "Downlink L4 Protocol" << ": " << std::setw(1)
-       << (commonParams.dlUseUdp ? "UDP" : "TCP") << "\n"
-       << std::setw(30) << "Uplink Flow" << ": " << std::setw(1)
-       << (commonParams.enableUlFlow ? "Enabled" : "Disabled") << "\n"
-       << std::setw(30) << "Uplink Data Format" << ": " << std::setw(1)
-       << (commonParams.dataFormat == DataFormat::IMAGE       ? "IMAGE"
-           : commonParams.dataFormat == DataFormat::VIDEO     ? "VIDEO"
-           : commonParams.dataFormat == DataFormat::EMBEDDING ? "EMBEDDING"
-           : commonParams.dataFormat == DataFormat::TEXT      ? "TEXT"
-                                                              : "UNKNOWN")
+       << std::setw(30) << "App Embedding Prefix Crit." << ": " << std::setw(1)
+       << (commonParams.appEmbeddingPrefixCriticality ? "Enabled" : "Disabled") << "\n"
+       << std::setw(30) << "App Fill Policy" << ": " << std::setw(1) << commonParams.appFillPolicy
        << "\n"
-       << std::setw(30) << "Uplink Packet Size" << ": " << std::setw(1) << commonParams.ulPacketSize
-       << " bytes\n"
-       << std::setw(30) << "Uplink Bit Rate" << ": " << std::setw(1) << commonParams.ulBitRate / 1e3
-       << " kbps\n"
-       << std::setw(30) << "Uplink Min Packet Interval" << ": " << std::setw(1)
-       << commonParams.ulMinInterval * 1e3 << " ms\n"
-       << std::setw(30) << "Uplink L4 Protocol" << ": " << std::setw(1)
-       << (commonParams.ulUseUdp ? "UDP" : "TCP") << "\n"
-       << std::setw(30) << "ib-ORAN MAC Scheduler Logging" << ": " << std::setw(1)
+       << std::setw(30) << "App Save All Messages" << ": " << std::setw(1)
+       << (commonParams.appSaveAllMessages ? "Enabled" : "Disabled") << "\n"
+       << std::setw(30) << "App Message Log" << ": " << std::setw(1)
+       << (commonParams.appSaveMessageLog ? "Enabled" : "Disabled") << "\n"
+       << std::setw(30) << "MAC Scheduler Logging" << ": " << std::setw(1)
        << (commonParams.enableIbOranSchedCoreLog ? "Enabled" : "Disabled") << "\n"
        << std::setw(30) << "RRC Logging" << ": " << std::setw(1)
        << (commonParams.enableRrcLog ? "Enabled" : "Disabled") << "\n"

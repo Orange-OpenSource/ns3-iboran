@@ -22,7 +22,7 @@ respective directories. Do NOT remove or modify those files.
    License:     GNU General Public License v2.0 (GPLv2)
    SPDX ID:     GPL-2.0-only
    License URL: https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
-   Copyright:   Copyright (c) 2005–2024 ns-3 Project contributors
+   Copyright:   Copyright (c) 2005–2026 ns-3 Project contributors
 
    Usage in ib-ORAN:
    ib-ORAN is built on top of the ns-3 network simulator. The ns-3 LTE module
@@ -118,7 +118,43 @@ source and are bound by that source's terms.
    Usage in ib-ORAN:
    Optional benchmark dataset for the dApp/xApp intent-matching pipeline
    (see doc/simulation-data.md). Not included in this repository; place
-   downloaded contents in /notebook/dataset/market-1501.
+   downloaded contents in notebook/dataset/market-1501/.
+
+================================================================================
+
+================================================================================
+THIRD-PARTY MODELS (NOT DISTRIBUTED)
+================================================================================
+
+The following models are downloaded automatically on first use into
+notebook/models/. They are not bundled with this repository, and users
+are bound by the terms of their original sources.
+
+1. CLIP (openai/clip-vit-base-patch16)
+--------------------------------------------------------------------------------
+   Source:      https://huggingface.co/openai/clip-vit-base-patch16
+   Code:        https://github.com/openai/CLIP
+   Terms:       See the model card at the source.
+
+   Usage in ib-ORAN:
+   Embedding extraction backend (--embedder CLIP), loaded with the
+   Hugging Face transformers library.
+
+2. TransReID
+--------------------------------------------------------------------------------
+   Source:      https://github.com/damo-cv/TransReID
+   License:     See the LICENSE file of the repository.
+   Weights:     TransReID*(ViT) Market-1501 checkpoint, from the Google Drive
+                link in the repository README.
+   Citation:    He, S., Luo, H., Wang, P., Wang, F., Li, H., & Jiang, W.
+                (2021). TransReID: Transformer-based Object
+                Re-Identification. ICCV 2021.
+
+   Usage in ib-ORAN:
+   Embedding extraction backend (--embedder TransReID). The repository is
+   cloned into notebook/models/emb/TransReID/ and imported at runtime; its
+   files are not modified. The weights were trained on Market-1501, whose
+   research-only, non-commercial terms may also apply to them.
 
 ================================================================================
 

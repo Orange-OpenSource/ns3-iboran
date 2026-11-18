@@ -23,6 +23,11 @@ RUN_CONFIG_PATH = (
     Path(__file__).resolve().parents[2] / "notebook" / "logs" / "runConfig.yaml"
 )
 
+# application-layer options, see doc/application.md
+AppTransport = Literal["UDP", "TCP"]
+AppEnvelope = Literal["None", "A2A-JSONRPC", "A2A-HTTPJSON", "A2A-gRPC"]
+AppFillPolicy = Literal["Auto", "Zero", "Nan", "Drop"]
+
 
 class CommonRanParams(BaseModel):
     simTime: float = 20.0
@@ -43,15 +48,22 @@ class CommonRanParams(BaseModel):
     backhaulMtu: int = 1500
     backhaulDelay: float = 10.0
 
-    enableDlFlow: bool = True
-    dlPacketSize: int = 512
-    dlBitRate: int = 200_000
-    dlUseUdp: bool = True
+    appDlEnable: bool = True
+    appDlPacketSize: int = 512
+    appDlBitRate: int = 2_000_000
+    appDlTransport: AppTransport = "TCP"
 
-    enableUlFlow: bool = True
-    ulPacketSize: int = 512
-    ulBitRate: int = 100_000
-    ulUseUdp: bool = True
+    appUlEnable: bool = True
+    appUlPacketSize: int = 512
+    appUlBitRate: int = 1_000_000
+    appUlTransport: AppTransport = "TCP"
+
+    appFraming: bool = True
+    appEnvelope: AppEnvelope = "None"
+    appEmbeddingPrefixCriticality: bool = False
+    appFillPolicy: AppFillPolicy = "Auto"
+    appSaveAllMessages: bool = False
+    appSaveMessageLog: bool = False
 
     enableIbOranSchedCoreLog: bool = False
     enableRrcLog: bool = False
@@ -64,13 +76,13 @@ class LteParams(BaseModel):
     ulEarfcn: int = 20750
     dlRbNum: int = 100
     ulRbNum: int = 100
-    transmissionMode: int = Field(2, ge=1, le=7)
+    transmissionMode: int = Field(2, ge=0, le=6)
     p0NominalPusch: float = -96.0
 
 
 class NrParams(BaseModel):
     centralFrequency: float = 3.5e9
-    bandwidth: float = 100e6
+    bandwidth: float = 10e6
     numCc: int = Field(1, ge=1, le=16)
     numBwp: int = Field(1, ge=1, le=4)
     numerology: int = Field(1, ge=0, le=6)
@@ -87,15 +99,15 @@ class OrchestratorConfig(BaseModel):
     xapp_control_period_f: int = 1
     dapp_algo_ue_selection: str = "Random"
     xapp_algo_rbg_bounding: str = "Bypass"
+    learning_mode: Literal["online", "train", "eval"] = "online"
     dataset_id: str = "toy"
-    data_format: Literal["IMAGE", "VIDEO", "EMBEDDING", "TEXT"] = "IMAGE"
-    embedder: Literal["TransReID", "CLIP"] = "TransReID"
+    data_format: Literal["IMAGE", "VIDEO", "EMBEDDING", "TEXT"] = "EMBEDDING"
+    embedder: Literal["TransReID", "CLIP"] = "CLIP"
     oid_range: tuple[int, int] = (1, 2)
     save_dapp_log: bool = False
+    save_xapp_log: bool = False
     save_learning_convg: bool = False
     verbose: bool = True
-
-    learning_mode: Literal["online", "train", "eval"] = "online"
 
 
 class DatasetConfig(BaseModel):

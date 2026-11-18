@@ -8,6 +8,7 @@
 #
 # Authors: see CONTRIBUTORS.md
 
+import os
 from abc import abstractmethod
 
 import numpy as np
@@ -26,9 +27,9 @@ from model.iboran_interfaces.iboran_shm_protocol import (
     LinkDirection,
     RatType,
     MessageType,
-    ProtocolLimits,
 )
 from model.iboran_controller.iboran_controller import IbOranController
+from model.utils.file_store import FileStore
 
 
 class IbOranXApp(IbOranController):
@@ -39,6 +40,7 @@ class IbOranXApp(IbOranController):
         intents: dict[LinkDirection, np.ndarray] | None,
         rat_type: RatType,
         control_period_f: int,
+        save_log: bool = False,
         app_id: str | None = None,
     ):
         super().__init__(
@@ -47,6 +49,7 @@ class IbOranXApp(IbOranController):
             control_period=control_period_f,
             app_id=app_id,
         )
+        self.save_log = save_log
 
     def run(
         self, cpp2Py: Cpp2Py, py2Cpp: Py2Cpp, e2_dapp_report: E2DAppReport
@@ -104,6 +107,19 @@ class IbOranXApp(IbOranController):
 
     def _reset_variables(self) -> None:
         self._reset_common_variables()
+
+        store = FileStore(
+            script_dir=os.path.dirname(os.path.abspath(__file__)),
+            folder_name="../../notebook/logs/xapp_logs",
+            log_name=f"xApp{self.app_id}.log",
+        )
+        self.store = None
+        if self.save_log:
+            self.store = store
+            self.store.overwrite(f"RAT Type: {self.rat_type}\n\n")
+        else:
+            # a run without the log removes the log of an earlier run
+            store.remove(prune_dir=True)
 
         self._e2_rc_control = self._per_link(E2RcControl)
         for ctrl in self._e2_rc_control.values():

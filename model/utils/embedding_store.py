@@ -27,6 +27,9 @@ from huggingface_hub import snapshot_download
 from transformers import CLIPModel, CLIPProcessor
 from torchvision import transforms
 
+# TransReID commit tested with ib-ORAN
+_TRANSREID_COMMIT = "dec55046fcdfadee14e2c28e2df89305d8f7557a"
+
 
 class EmbeddingStore:
     def __init__(self, extraction_model: str = "CLIP"):
@@ -187,7 +190,7 @@ class CLIPBackend(EmbeddingBackend):
             )
             print("CLIP model: Loaded from local directory.")
             return model, processor
-        except Exception as first_exc:
+        except Exception:
             try:
                 model = CLIPModel.from_pretrained(model_name)
                 model.to(self.device)
@@ -249,6 +252,13 @@ class TransReIDBackend(EmbeddingBackend):
             )
             if result.returncode != 0:
                 raise RuntimeError(f"Failed to clone TransReID into {local_dir}.")
+            result = subprocess.run(
+                ["git", "-C", local_dir, "checkout", _TRANSREID_COMMIT]
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"Failed to check out TransReID commit {_TRANSREID_COMMIT}."
+                )
             print("TransReID model: Cloned.")
 
         # Google Drive file ID for the Market-1501 TransReID*(ViT) checkpoint
@@ -327,7 +337,7 @@ class TransReIDBackend(EmbeddingBackend):
             return model, transform
         except Exception as local_e:
             raise RuntimeError(
-                "Could not load TransReID model."
+                "Could not load TransReID model. "
                 "Please verify the config, weights, and repo layout."
             ) from local_e
 

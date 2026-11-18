@@ -118,6 +118,9 @@ main(int argc, char* argv[])
     RngSeedManager::SetSeed(1);
     RngSeedManager::SetRun(commonParams.rngRun);
 
+    // TCP minimum retransmission timeout, as in Linux (ns-3 default: 1 s)
+    Config::SetDefault("ns3::TcpSocketBase::MinRto", TimeValue(MilliSeconds(200)));
+
     // -- LTE AND EPC INITIALIZATION --------------------------------------------
     Ptr<NrHelper> nrHelper = CreateObject<NrHelper>();
     Ptr<NrPointToPointEpcHelper> epcHelper = CreateObject<NrPointToPointEpcHelper>();
