@@ -1,4 +1,4 @@
-# Application layer
+# Application layer: developer guide
 
 This document describes the code of the application layer: its files and interfaces, the envelope and packet formats, and a worked example down to the bytes. It is meant for changing the code or decoding packets by hand. For the behavior, the outputs and the configuration of a run, see [application layer](../../doc/application.md). Paths are relative to `contrib/iboran`.
 
