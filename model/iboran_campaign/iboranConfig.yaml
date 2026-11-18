@@ -47,7 +47,6 @@ common:
   appFraming: true                      # 44-byte fragment header per packet;
                                         # false = original raw transfer, no loss localization
   appEnvelope: "None"                   # None | A2A-JSONRPC | A2A-HTTPJSON | A2A-gRPC
-  appEmbeddingPrefixCriticality: false  # earlier embedding dims more critical (Matryoshka, PCA)
   appFillPolicy: "Auto"                 # lost elements: Auto (NaN for float embeddings) | Zero | Nan | Drop
   appSaveAllMessages: false             # also save messages other than the file as <stem>_m<id><ext>
   appSaveMessageLog: false              # per-message transmission and reception log in notebook/logs/appMessages.json

@@ -57,28 +57,12 @@ Criticality ranks payload bytes from 1, the most critical, to 10, the default. T
 | `H264_ANNEXB` | Non-IDR slice | 5 |
 | `H264_ANNEXB` | SEI, access unit delimiter | 9 |
 | `H264_ANNEXB` | Other NAL units | 8 |
-| Embeddings | All dimensions, by default | 10 |
-| Embeddings | With `appEmbeddingPrefixCriticality: true`, see below | 1 to 9 |
+| Embeddings | All dimensions | 10 |
 | Other types | All bytes | 10 |
 
 Decaying levels give 3 to the first later IDAT or scan, 4 to the next two, 5 to the next four, and so on up to 9. A baseline JPEG has one scan, so its whole image data is level 2.
 
-With `appEmbeddingPrefixCriticality: true`, embeddings are treated as importance-ordered (Matryoshka or PCA-rotated), so the first dimensions are the most critical:
-
-| Dimensions | 0–7 | 8–15 | 16–31 | 32–63 | 64–127 | 128–255 | 256–511 | 512–1023 | 1024+ |
-|---|---|---|---|---|---|---|---|---|---|
-| Level | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
-
 A packet takes the lowest level of the bytes it carries. The envelope is level 1, since the receiver needs all of it to read the message. Before each packet is sent, its level is published for the UE and link, where the MAC schedulers read it as the content criticality of the [E3 INDICATION](service-models.md#e3sm-e3-indication).
-
-Packet levels of a 1,024-dimension float32 embedding with prefix ordering, in 512-byte packets:
-
-| Packet | `None`: dimensions | `None`: level | `A2A-JSONRPC`: dimensions | `A2A-JSONRPC`: level |
-|---|---|---|---|---|
-| 0 | 0–116 | 1 | Envelope start, 0–29 | 1 |
-| 1 | 117–233 | 5 | 30–116 | 3 |
-| 2 | 234–350 | 6 | 117–203 | 5 |
-| 3 | 351–467 | 7 | 204–290 | 6 |
 
 ## Envelope models
 
@@ -213,7 +197,6 @@ Keys under `common` in [`iboranConfig.yaml`](../model/iboran_campaign/iboranConf
 | `appFraming` | `true` | 44-byte header on every packet |
 | `appEnvelope` | `None` | `None`, `A2A-JSONRPC`, `A2A-HTTPJSON`, `A2A-gRPC` |
 | `appFillPolicy` | `Auto` | `Auto`, `Zero`, `Nan`, `Drop` |
-| `appEmbeddingPrefixCriticality` | `false` | Importance-ordered embedding criticality |
 | `appSaveAllMessages` | `false` | Save messages other than the input file |
 | `appSaveMessageLog` | `false` | Write `notebook/logs/appMessages.json` |
 
@@ -226,4 +209,4 @@ Keys under `common` in [`iboranConfig.yaml`](../model/iboran_campaign/iboranConf
 - The receiver records no task outcome; the orchestrator judges it from the saved files and the message log.
 - Text is cut on bytes, so a multi-byte UTF-8 character can be split. The JSON envelopes send text and JSON in base64, where A2A would send them as `text` or `data` parts.
 - Criticality is published when a packet is handed to the socket, not when the MAC serves it.
-- `MP4`, `BMP`, text and raw payloads have uniform criticality.
+- `MP4`, `BMP`, embeddings, text and raw payloads have uniform criticality.

@@ -36,7 +36,6 @@ With `appEnvelope: None`, the wire message is the payload itself.
 | `UseUdp` | Both | `true` | `app*Transport` | UDP instead of TCP; must match on both sides |
 | `EnableFraming` | Both | `true` | `appFraming`, or any envelope at the receiver | Fragment header on every packet; must match on both sides |
 | `Envelope` | Transmission | `None` | `appEnvelope` | Envelope model; any model other than `None` turns framing on |
-| `EmbeddingPrefixCriticality` | Transmission | `false` | `appEmbeddingPrefixCriticality` | Importance-ordered embedding criticality |
 | `MaxDatagramSize` | Transmission | 1472 | | Upper bound on `PacketSize` over UDP |
 | `RntiRetryDelayMs` | Transmission | 50 | | Delay before the first packet |
 | `ContextId` | Transmission | Empty | | Context ID of messages that set none |
@@ -176,7 +175,6 @@ A message queued with `SendMessage()`, with `PacketSize` set to 160 (116 bytes o
 | `contentType` | `EMBEDDING_F32` |
 | Payload | 16 floats, 64 bytes: `00 00 80 3c 00 00 00 3d …` |
 | Metadata | `link`: `UL`, `objectId`: `12`, `round`: `0` |
-| Criticality | Prefix ordering: dimensions 0–7 at 1, 8–15 at 2 |
 
 | Model | Prefix | Payload on the wire | Suffix | Wire message | Packets | Bytes sent |
 |---|---|---|---|---|---|---|
@@ -222,7 +220,7 @@ Packets, with the bytes of prefix, payload and suffix in each slice:
 
 | Model | Packet | Size | Slice | Prefix, payload, suffix | Flags | Level |
 |---|---|---|---|---|---|---|
-| `None` | 0 | 108 | 0–63 | 0, 64, 0 | `FIRST`, `LAST` | 1 |
+| `None` | 0 | 108 | 0–63 | 0, 64, 0 | `FIRST`, `LAST` | 10 |
 | `A2A-JSONRPC` | 0 | 160 | 0–115 | 116, 0, 0 | `FIRST`, `ENVELOPE` | 1 |
 | `A2A-JSONRPC` | 1 | 160 | 116–231 | 116, 0, 0 | `ENVELOPE` | 1 |
 | `A2A-JSONRPC` | 2 | 149 | 232–336 | 105, 0, 0 | `ENVELOPE` | 1 |
