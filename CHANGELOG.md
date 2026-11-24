@@ -23,7 +23,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Breaking: E2SM-KPM indications carry TS 28.552 measurements: `DRB.UEThpDl/Ul` (kbps) replaces `actualThroughput`, and `DRB.RlcSduTransmittedVolumeDL/UL` (kbit per period) replaces `totalBytesServed`. `collectionStartTime` and `granularityPeriod` replace `timestamp`. `frameNo`, `totalBufferLevel` and `achievableRate` leave KPM. CQI, buffer size, content ID and head-of-line delay are documented as ib-ORAN extensions.
 - Breaking: E3 indications use the KPM names, units and field order for shared per-UE quantities (`drbUeThp` in kbps replaces `actualThroughput`); `totalBytesServed` leaves E3.
 - Breaking: E3SM `achievableRate` is in kbps instead of Mbps, as `drbUeThp`.
-- Breaking: `bufferLevel` and `totalBufferLevel` are renamed `bufferSize` and `totalBufferSize`, after the Buffer Size field of TS 38.321, and the dApp algorithms `TopKBufferLevel`, `GreedyBufferLevel`, `DpBufferLevel` and their `ib` variants are renamed `TopKBufferSize`, `GreedyBufferSize` and `DpBufferSize`. Checkpoints and cached results made under the old names no longer match.
+- Breaking: `bufferLevel` and `totalBufferLevel` are renamed `bufferSize` and `totalBufferSize`, after the Buffer Size field of TS 38.321, and the dApp algorithms `TopKBufferLevel`, `GreedyBufferLevel`, `DpBufferLevel` and their `ib` variants are renamed `TopKBufferSize`, `GreedyBufferSize` and `DpBufferSize`. Cached results made under the old names no longer match.
 
 ### Removed
 - The developer reference `model/iboran_application/README.md`.
