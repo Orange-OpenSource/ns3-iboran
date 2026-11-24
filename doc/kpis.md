@@ -11,12 +11,10 @@ This document defines the KPIs that ib-ORAN reports for each run. KPIs are repor
 | `Latency` | Mean delay of the received packets | ms |
 | `Jitter` | Mean packet delay variation | ms |
 
-> [!NOTE]
-> These KPIs come from the ns-3 flow monitor and count only data flows: remote host to UE port `2000 + i` (downlink) and UE to remote host port `4000 + i` (uplink), for UE index *i* from 0. Core signaling and TCP acknowledgment flows are excluded.
->
-> They are per packet. Over TCP, a retransmission counts as an extra packet with its own delay, so the wait for recovery shows only in the [message log](application.md#message-log).
->
-> A TCP flow starts with the SYN at application start and ends with the FIN at application stop. With `appSaveMessageLog: true`, throughput is measured from the link's earliest `firstTxNs` to its latest `lastRxNs` in the message log; otherwise over the whole connection, which is not comparable with UDP. Without the log, the orchestrator prints a warning.
+These KPIs come from the ns-3 flow monitor and count only data flows: remote host to UE port `2000 + i` (downlink) and UE to remote host port `4000 + i` (uplink), for UE index *i* from 0. Core signaling and TCP acknowledgment flows are excluded. They are per packet: over TCP, a retransmission counts as an extra packet with its own delay, so the wait for recovery shows only in the [message log](application.md#message-log).
+
+> [!WARNING]
+> Over TCP, set `appSaveMessageLog: true`. Throughput is then measured from the link's earliest `firstTxNs` to its latest `lastRxNs` in the message log. Without the log, it is measured over the whole connection, from the SYN at application start to the FIN at application stop. That value is not comparable with UDP, and the orchestrator prints a warning.
 
 ## Intent-based KPIs
 

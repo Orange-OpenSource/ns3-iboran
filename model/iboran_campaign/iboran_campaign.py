@@ -267,7 +267,7 @@ class IbOranCampaign:
     def pretrain(
         self, rat_type, dapp_period, xapp_period, k, dapp_algo, xapp_algo, n_runs
     ):
-        "Train one pattern over n_runs sequential replications into its checkpoint."
+        "Train one configuration over n_runs sequential replications into its checkpoint."
         ckpt = self._checkpoint_path(
             rat_type, dapp_algo, xapp_algo, dapp_period, xapp_period, k
         )
@@ -1187,9 +1187,9 @@ class IbOranCampaign:
                     "label": "NeuralLinUCB",
                 },
                 "ibTopKCqi": {"color": tc.light[0], "label": "ib Top-K: CQI"},
-                "ibTopKBufferLevel": {
+                "ibTopKBufferSize": {
                     "color": tc.light[1],
-                    "label": "ib Top-K: Buffer Level",
+                    "label": "ib Top-K: Buffer Size",
                 },
                 "ibTopKPropFairness": {
                     "color": tc.light[2],
@@ -1204,9 +1204,9 @@ class IbOranCampaign:
                     "label": "ib Top-K: Multi-Criteria",
                 },
                 "TopKCqi": {"color": tc.light[0], "label": "Top-K: CQI"},
-                "TopKBufferLevel": {
+                "TopKBufferSize": {
                     "color": tc.light[1],
-                    "label": "Top-K: Buffer Level",
+                    "label": "Top-K: Buffer Size",
                 },
                 "TopKPropFairness": {
                     "color": tc.light[2],
@@ -1221,9 +1221,9 @@ class IbOranCampaign:
                     "label": "Top-K: Multi-Criteria",
                 },
                 "ibGreedyCqi": {"color": tc.vibrant[0], "label": "ib Greedy: CQI"},
-                "ibGreedyBufferLevel": {
+                "ibGreedyBufferSize": {
                     "color": tc.vibrant[1],
-                    "label": "ib Greedy: Buffer Level",
+                    "label": "ib Greedy: Buffer Size",
                 },
                 "ibGreedyPropFairness": {
                     "color": tc.vibrant[2],
@@ -1238,9 +1238,9 @@ class IbOranCampaign:
                     "label": "ib Greedy: Multi-Criteria",
                 },
                 "GreedyCqi": {"color": tc.vibrant[0], "label": "Greedy: CQI"},
-                "GreedyBufferLevel": {
+                "GreedyBufferSize": {
                     "color": tc.vibrant[1],
-                    "label": "Greedy: Buffer Level",
+                    "label": "Greedy: Buffer Size",
                 },
                 "GreedyPropFairness": {
                     "color": tc.vibrant[2],
@@ -1255,9 +1255,9 @@ class IbOranCampaign:
                     "label": "Greedy: Multi-Criteria",
                 },
                 "ibDpCqi": {"color": tc.dark[0], "label": "ib DP: CQI"},
-                "ibDpBufferLevel": {
+                "ibDpBufferSize": {
                     "color": tc.dark[1],
-                    "label": "ib DP: Buffer Level",
+                    "label": "ib DP: Buffer Size",
                 },
                 "ibDpPropFairness": {
                     "color": tc.dark[2],
@@ -1269,7 +1269,7 @@ class IbOranCampaign:
                     "label": "ib DP: Multi-Criteria",
                 },
                 "DpCqi": {"color": tc.dark[0], "label": "DP: CQI"},
-                "DpBufferLevel": {"color": tc.dark[1], "label": "DP: Buffer Level"},
+                "DpBufferSize": {"color": tc.dark[1], "label": "DP: Buffer Size"},
                 "DpPropFairness": {"color": tc.dark[2], "label": "DP: Prop. Fairn."},
                 "DpCriticality": {"color": tc.dark[3], "label": "DP: Criticality"},
                 "DpMultiCriteria": {"color": tc.dark[4], "label": "DP: Multi-Criteria"},

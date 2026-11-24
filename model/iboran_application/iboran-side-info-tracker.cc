@@ -60,4 +60,19 @@ SideInfoTracker::GetRntiObjectId(uint16_t rnti, LinkDirection direction)
     return "null";
 }
 
+void
+SideInfoTracker::UpdateUeId(uint16_t cellId, uint16_t rnti, uint64_t ueId)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_ueIdMap[{cellId, rnti}] = ueId;
+}
+
+uint64_t
+SideInfoTracker::GetUeId(uint16_t cellId, uint16_t rnti)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto it = m_ueIdMap.find({cellId, rnti});
+    return (it != m_ueIdMap.end()) ? it->second : 0; // 0: not identified yet
+}
+
 } // namespace ns3

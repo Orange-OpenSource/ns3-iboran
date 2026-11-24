@@ -17,11 +17,11 @@ from model.iboran_interfaces.iboran_shm_structure import (
     Cpp2Py,
     Py2Cpp,
     E3Indication,
-    E3Control,
+    E3ControlRequest,
 )
 from model.iboran_interfaces.iboran_e2sm_dapp_structure import (
-    E2DAppControl,
-    E2DAppReport,
+    E2DAppControlRequest,
+    E2DAppIndication,
 )
 from model.iboran_interfaces.iboran_shm_protocol import (
     LinkDirection,
@@ -52,8 +52,8 @@ class IbOranDApp(IbOranController):
         self.save_log = save_log
 
     def run(
-        self, cpp2Py: Cpp2Py, py2Cpp: Py2Cpp, e2_dapp_control: E2DAppControl
-    ) -> E2DAppReport:
+        self, cpp2Py: Cpp2Py, py2Cpp: Py2Cpp, e2_dapp_control: E2DAppControlRequest
+    ) -> E2DAppIndication:
         return self._run(cpp2Py=cpp2Py, py2Cpp=py2Cpp, peer_message=e2_dapp_control)
 
     @abstractmethod
@@ -62,42 +62,50 @@ class IbOranDApp(IbOranController):
         ...
 
     @abstractmethod
-    def write_e2_dapp_report(self, link_dir: LinkDirection) -> None:
-        "Write E2SM-DAPP REPORT message elements."
+    def write_e2_dapp_indication(self, link_dir: LinkDirection) -> None:
+        "Write E2SM-DAPP INDICATION message elements."
         ...
 
     @abstractmethod
     def store_e2_dapp_control(
-        self, link_dir: LinkDirection, e2_dapp_control: E2DAppControl
+        self, link_dir: LinkDirection, e2_dapp_control: E2DAppControlRequest
     ) -> None:
-        "Store E2SM-DAPP CONTROL message elements."
+        "Store E2SM-DAPP CONTROL REQUEST message elements."
         ...
 
     def _extract_report(self, cpp2Py: Cpp2Py) -> E3Indication:
         return cpp2Py.e3Indication
 
-    def _output_message(self) -> E2DAppReport:
-        return self.e2_dapp_.report
+    def _output_message(self) -> E2DAppIndication:
+        return self.e2_dapp_.indication
 
     def write_primary_control(self, py2Cpp: Py2Cpp, report: E3Indication) -> None:
         self.write_e3_control(py2Cpp, report)
 
     def write_dapp_interface_message(self, link_dir: LinkDirection) -> None:
-        self.write_e2_dapp_report(link_dir)
+        self.write_e2_dapp_indication(link_dir)
 
     def store_dapp_interface_message(
-        self, link_dir: LinkDirection, peer_message: E2DAppControl
+        self, link_dir: LinkDirection, peer_message: E2DAppControlRequest
     ) -> None:
         self.store_e2_dapp_control(link_dir, peer_message)
 
-    def _verify_peer_message(self, peer_message: E2DAppControl) -> None:
-        if peer_message.type != MessageType.E2SM_DAPP_CONTROL:
+    def _verify_peer_message(self, peer_message: E2DAppControlRequest) -> None:
+        if peer_message.type != MessageType.E2SM_DAPP_CONTROL_REQUEST:
             raise ValueError(
-                f"ib-ORAN {self._KIND}: E2SM-DAPP CONTROL verification failed."
+                f"ib-ORAN {self._KIND}: E2SM-DAPP CONTROL REQUEST verification failed."
             )
 
-    def _time_unit(self, report: E3Indication) -> int:
-        return report.timestamp // 1_000_000
+    def _report_due(self, report: E3Indication) -> bool:
+        link_dir = report.linkDirection
+        current_ms = report.timestamp // 1_000_000
+        if current_ms - self._last_control_ms[link_dir] >= self.control_period:
+            self._last_control_ms[link_dir] = current_ms
+            return True
+        return False
+
+    def _outcome_of(self, outcome) -> tuple[int, int, int]:
+        return outcome.e3RequestSn, outcome.e3Cause, outcome.e3NumRejectedUe
 
     def _extra_skip_check(self, link_dir: LinkDirection) -> bool:
         return self._e2_dapp_control[link_dir].skipThisStep
@@ -108,6 +116,7 @@ class IbOranDApp(IbOranController):
 
     def _reset_variables(self) -> None:
         self._reset_common_variables()
+        self._last_control_ms = self._per_link(int)
 
         store = FileStore(
             script_dir=os.path.dirname(os.path.abspath(__file__)),
@@ -122,7 +131,7 @@ class IbOranDApp(IbOranController):
             # a run without the log removes the log of an earlier run
             store.remove(prune_dir=True)
 
-        self._e3_control = self._per_link(E3Control)
+        self._e3_control = self._per_link(E3ControlRequest)
         for ctrl in self._e3_control.values():
             ctrl.skipThisStep = True
             ctrl.ueSchedSize = 0

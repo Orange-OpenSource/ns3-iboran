@@ -39,7 +39,7 @@ _FAMILIES = {
     "Dp": DAppAlgoUeSelectionDp,
 }
 
-_VALID_METRICS = {"Cqi", "BufferLevel", "PropFairness", "Criticality", "MultiCriteria"}
+_VALID_METRICS = {"Cqi", "BufferSize", "PropFairness", "Criticality", "MultiCriteria"}
 
 BASE_DAPP_ALGOS_KEYS = set(_STANDALONE) | {
     f"{family}{metric}" for family in _FAMILIES for metric in _VALID_METRICS

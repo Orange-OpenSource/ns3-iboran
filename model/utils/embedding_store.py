@@ -30,6 +30,9 @@ from torchvision import transforms
 # TransReID commit tested with ib-ORAN
 _TRANSREID_COMMIT = "dec55046fcdfadee14e2c28e2df89305d8f7557a"
 
+# contrib/iboran/notebook/models/emb, whoever creates the backend
+EMB_MODEL_DIR = Path(__file__).resolve().parents[2] / "notebook" / "models" / "emb"
+
 
 class EmbeddingStore:
     def __init__(self, extraction_model: str = "CLIP"):
@@ -41,10 +44,7 @@ class EmbeddingStore:
         else:
             self.device = torch.device("cpu")
 
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        self._backend = BackendRegistry.create(
-            extraction_model, self.device, base_dir=base_dir
-        )
+        self._backend = BackendRegistry.create(extraction_model, self.device)
 
     @property
     def embedding_dim(self) -> int:
@@ -148,15 +148,13 @@ class BackendRegistry:
 
 @BackendRegistry.register("CLIP")
 class CLIPBackend(EmbeddingBackend):
-    def __init__(self, device: torch.device, base_dir: str):
+    def __init__(self, device: torch.device):
         super().__init__(device)
         ImageFile.LOAD_TRUNCATED_IMAGES = True
-        offline_model_dir = os.path.abspath(
-            os.path.join(base_dir, "../../notebook/models/emb/CLIP")
-        )
+
         self.model, self.processor = self._load(
             model_name="openai/clip-vit-base-patch16",
-            local_dir=os.path.join(offline_model_dir, "clip-vit-base-patch16"),
+            local_dir=str(EMB_MODEL_DIR / "CLIP" / "clip-vit-base-patch16"),
         )
 
     @property
@@ -208,11 +206,9 @@ class CLIPBackend(EmbeddingBackend):
 
 @BackendRegistry.register("TransReID")
 class TransReIDBackend(EmbeddingBackend):
-    def __init__(self, device: torch.device, base_dir: str):
+    def __init__(self, device: torch.device):
         super().__init__(device)
-        local_dir = os.path.abspath(
-            os.path.join(base_dir, "../../notebook/models/emb/TransReID")
-        )
+        local_dir = str(EMB_MODEL_DIR / "TransReID")
         self.model, self.transform = self._load(
             model_name="vit_transreid_stride",
             patch_name="vit_transreid_market.pth",

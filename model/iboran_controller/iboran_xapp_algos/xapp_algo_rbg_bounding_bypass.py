@@ -20,10 +20,10 @@ class XAppAlgoRbgBoundingBypass(XAppAlgoRbgBounding):
 
         self._reset_variables()
 
-    def process(self, candidates, e2KpmReport, e2DAppReport, **kwargs) -> bool:
+    def process(self, candidates, e2KpmIndication, e2DAppIndication, **kwargs) -> bool:
         "Execute the RBG bounding."
         self.candidate_idx = candidates
-        self.bounded_rbg = e2KpmReport.numRbg * np.ones(
+        self.bounded_rbg = e2KpmIndication.numRbg * np.ones(
             len(self.candidate_idx), dtype=int
         )
 

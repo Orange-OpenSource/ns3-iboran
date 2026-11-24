@@ -113,7 +113,7 @@ If you use ib-ORAN in your research, cite the following paper:
 @inproceedings{agheli2026iboran,
   author        = {Agheli, Pouya and Lefebvre, Gr{\'e}goire},
   title         = {Intent-Based Orchestration in Open RAN: An ns-3 Simulation Framework},
-  booktitle     = {European Conference on Networks and Communications (EuCNC)},
+  booktitle     = {European Conference on Networks and Communications (EuCNC) \& 6G Summit},
   year          = {2026},
   url           = {https://ieeexplore.ieee.org/document/11577276},
   eprint        = {2605.30079},

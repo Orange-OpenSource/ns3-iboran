@@ -32,10 +32,14 @@ class SideInfoTracker
     void UpdateRntiObjectId(uint16_t rnti, LinkDirection direction, std::string objectId);
     std::string GetRntiObjectId(uint16_t rnti, LinkDirection direction);
 
+    void UpdateUeId(uint16_t cellId, uint16_t rnti, uint64_t ueId);
+    uint64_t GetUeId(uint16_t cellId, uint16_t rnti);
+
   private:
     SideInfoTracker() = default;
     std::map<std::pair<uint16_t, LinkDirection>, uint8_t> m_criticalityMap;
     std::map<std::pair<uint16_t, LinkDirection>, std::string> m_objectIdMap;
+    std::map<std::pair<uint16_t, uint16_t>, uint64_t> m_ueIdMap;
     std::mutex m_mutex;
 };
 

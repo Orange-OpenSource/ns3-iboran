@@ -68,7 +68,7 @@ class RbgDemandCalculator:
         rbg_demand_k = np.zeros(len(input_idx_vect), dtype=int)
 
         for i, idx in enumerate(input_idx_vect):
-            pending_bits = Cpp2PyReport.ue[idx].bufferLevel * 8 / self.n_layers
+            pending_bits = Cpp2PyReport.ue[idx].bufferSize * 8 / self.n_layers
 
             if self.rat_type == RatType.LTE:
                 prb_demand = self._compute_prb_lte(pending_bits, assigned_mcs_k[i])

@@ -16,10 +16,14 @@ import numpy as np
 from model.iboran_interfaces.iboran_shm_structure import Cpp2Py, Py2Cpp
 from model.iboran_interfaces.iboran_e2sm_dapp_structure import (
     E2DappInterface,
-    E2DAppControl,
-    E2DAppReport,
+    E2DAppControlRequest,
+    E2DAppIndication,
 )
-from model.iboran_interfaces.iboran_shm_protocol import LinkDirection, RatType
+from model.iboran_interfaces.iboran_shm_protocol import (
+    LinkDirection,
+    RatType,
+    ControlCause,
+)
 from model.iboran_controller.iboran_controller_stats import IbOranControllerStats
 from model.utils.cpp2py_message_checker import Cpp2PyMessageChecker
 
@@ -45,6 +49,7 @@ class IbOranController(ABC):
         report = self._extract_report(cpp2Py)
         link_dir = report.linkDirection
         self.stats.steps[link_dir] += 1
+        self._record_outcome(cpp2Py.controlOutcome, link_dir)
 
         if self._should_skip_step(py2Cpp, report, peer_message):
             return self._output_message()
@@ -101,8 +106,13 @@ class IbOranController(ABC):
         ...
 
     @abstractmethod
-    def _time_unit(self, report) -> int:
-        "Return the absolute control-period unit (subframe or frame) for report."
+    def _report_due(self, report) -> bool:
+        "Return True when this report starts a new control period."
+        ...
+
+    @abstractmethod
+    def _outcome_of(self, outcome) -> tuple[int, int, int]:
+        "Return (request SN, cause, rejected UE entries) of this controller's previous request."
         ...
 
     @abstractmethod
@@ -116,22 +126,18 @@ class IbOranController(ABC):
 
     def _reset_common_variables(self) -> None:
         self.e2_dapp_ = E2DappInterface()
-        self._e2_dapp_report = self._per_link(E2DAppReport)
-        self._e2_dapp_control = self._per_link(E2DAppControl)
+        self._e2_dapp_indication = self._per_link(E2DAppIndication)
+        self._e2_dapp_control = self._per_link(E2DAppControlRequest)
         self.cpp2py_msg_checker = Cpp2PyMessageChecker(rat_type=self.rat_type)
-        self.last_control_unit = self._per_link(int)
+        self._last_outcome_sn = self._per_link(int)
 
     def _per_link(self, factory):
         return {LinkDirection.DOWNLINK: factory(), LinkDirection.UPLINK: factory()}
 
     def _should_skip_step(self, py2Cpp: Py2Cpp, report, peer_message) -> bool:
         link_dir = report.linkDirection
-        current_unit = self._time_unit(report)
-        elapsed = current_unit - self.last_control_unit[link_dir]
 
-        if elapsed >= self.control_period:
-            self.last_control_unit[link_dir] = current_unit
-        else:
+        if not self._report_due(report):
             self.write_primary_control(py2Cpp, report)
             self.write_dapp_interface_message(link_dir)
             return True
@@ -156,6 +162,15 @@ class IbOranController(ABC):
         self._reset_primary_control_to_skip(link_dir)
         self.write_primary_control(py2Cpp, report)
         self.write_dapp_interface_message(link_dir)
+
+    def _record_outcome(self, outcome, link_dir: LinkDirection) -> None:
+        request_sn, cause, num_rejected_ue = self._outcome_of(outcome)
+        if request_sn == self._last_outcome_sn[link_dir]:
+            return  # no new request answered since the last step
+        self._last_outcome_sn[link_dir] = request_sn
+        if cause != ControlCause.NONE:
+            self.stats.failures[link_dir][ControlCause(cause).name] += 1
+        self.stats.rejected_ue[link_dir] += num_rejected_ue
 
     def print_stats(self) -> None:
         self.stats.print_stats(kind=self._KIND, app_id=self.app_id)

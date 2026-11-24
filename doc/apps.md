@@ -6,7 +6,7 @@ This document lists the Open RAN applications implemented in ib-ORAN, grouped by
 |---|---|---|---|
 | dApp | O-DU | Below 10 ms | Multiples of a subframe (`--dapp_control_period_sf`) |
 | xApp | Near-RT RIC | 10 ms to 1 s | Multiples of a frame (`--xapp_control_period_f`) |
-| rApp | Non-RT RIC | Above 1 s | Not implemented |
+| rApp | Non-RT RIC | Above 1 s | Not implemented yet |
 
 ## dApps
 
@@ -23,8 +23,3 @@ The UE selection algorithms are listed in [algorithms](algorithms.md#dapp-ue-sel
 | xApp MAC scheduler | `MacScheduler` | Guides the dApp MAC scheduler over a longer horizon. At each control step, it sets per-UE bounds on the RBGs the dApp may grant in one TTI or slot. | E2SM-KPM, E2SM-RC, E2SM-DAPP | `--xapp_algo_rbg_bounding` |
 
 The RBG bounding algorithms are listed in [algorithms](algorithms.md#xapp-rbg-bounding).
-
-## rApps
-
-> [!NOTE]
-> rApps are not implemented yet. This section will list them once Non-RT RIC support is added.

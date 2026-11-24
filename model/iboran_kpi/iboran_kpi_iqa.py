@@ -9,7 +9,6 @@
 # Authors: see CONTRIBUTORS.md
 
 
-import os
 import numpy as np
 from dataclasses import replace
 
@@ -39,9 +38,7 @@ class IbOranIQA(IbOranKPI):
         else:
             device = torch.device("cpu")
 
-        abs_path = os.path.dirname(os.path.abspath(__file__))
-        base_dir = os.path.abspath(os.path.join(abs_path, "../../notebook"))
-        self._clip = CLIPBackend(device, base_dir=base_dir)
+        self._clip = CLIPBackend(device)
 
         self.resize_dim = (224, 224)
 

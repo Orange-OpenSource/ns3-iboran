@@ -6,19 +6,15 @@ This document describes the data that feeds an ib-ORAN simulation and the output
 
 ### Payload formats
 
-UEs carry payloads in the format set with `--data_format`:
+UEs carry payloads in the format set with `--data_format`. The application layer detects the content type of each file (see [content types](application.md#content-types)).
 
 | Format | Payload |
 |---|---|
 | `IMAGE` | Labeled images, each showing one object ID |
-| `EMBEDDING` | Embeddings of the labeled images, extracted with the model set by `--embedder` |
-
-When the embeddings of a dataset are missing, the first run with `EMBEDDING` extracts and stores them.
-
-The application layer detects the content type of each file and sends each payload as a framed message, so the receiver can place lost bytes (see [content types](application.md#content-types)).
+| `EMBEDDING` | Embeddings of the labeled images, extracted with the model set by `--embedder`. Missing embeddings are extracted on the first `EMBEDDING` run and stored in the dataset's folder. |
 
 > [!NOTE]
-> The application layer already handles `VIDEO` and `TEXT` payloads (see [content types](application.md#content-types)), but these formats have no KPI module yet.
+> The application layer also handles `VIDEO` and `TEXT` payloads, but these formats have no KPI module yet.
 
 ### Datasets
 
@@ -42,7 +38,7 @@ The embedding models are downloaded to `notebook/models/emb/` on first use.
 
 ### Object IDs and intents
 
-Each UE is assigned one object ID drawn uniformly from `--oid_range`, seeded by `--rng_run`. The intent of each link direction is drawn from the same range with the same seed. A UE is intent-relevant on a link when its object ID matches the intent of that link. A narrow range keeps at least one intent-relevant UE per link in most replications. A link with no intent-relevant UE reports a [`SatisfactionScore`](kpis.md#intent-based-kpis) of 0.
+Each UE is assigned one object ID drawn uniformly from `--oid_range`, seeded by `--rng_run`. The intent of each link direction is drawn from the same range with the same seed. A UE is intent-relevant on a link when its object ID matches the intent of that link. A narrow range keeps at least one intent-relevant UE per link in most replications.
 
 ## Outputs
 
@@ -56,9 +52,12 @@ Each UE is assigned one object ID drawn uniformly from `--oid_range`, seeded by 
 | Input file of each UE and link | `notebook/logs/oidQueries.json` | Always |
 | Application message log (see [message log](application.md#message-log)) | `notebook/logs/appMessages.json` | With `appSaveMessageLog: true` |
 | Flow monitor statistics | `notebook/.flowstats/iboran-flowstats.xml` | Always |
-| Recovered payloads | `notebook/dataset_dscv/<dataset>/` | Always |
+| Recovered payloads | `notebook/dataset_dscv/<dataset>/` | When the input file is received, in whole or in part |
 | NetAnim animation (see [visualization](visualization.md)) | `notebook/netanim/iboran-<rat>-anim.xml` | Always |
 
 ### Cached results
 
-A [campaign](usage.md#campaign) caches the KPI records of each run in `notebook/logs/run_data/` and reuses them on the next call with the same settings.
+A [campaign](usage.md#campaign) caches the KPI records of each run in `notebook/logs/run_data/` and reuses them on the next call with the same orchestrator settings.
+
+> [!WARNING]
+> Cached results are keyed by the orchestrator settings only. Delete `notebook/logs/run_data/` and `notebook/logs/checkpoints/` after any change to the simulator code or the RAN model. Delete `notebook/logs/run_data/` after any change to a `common` key, such as the `app*` keys.

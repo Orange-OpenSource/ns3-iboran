@@ -10,49 +10,62 @@
 
 from dataclasses import dataclass, field
 from typing import List
-from model.iboran_interfaces.iboran_shm_protocol import LinkDirection, MessageType
+from model.iboran_interfaces.iboran_shm_protocol import (
+    LinkDirection,
+    MessageType,
+    RanFunctionId,
+)
 
 
-# == E2SM-DAPP REPORT STRUCTURE ======================================
+# == E2SM-DAPP INDICATION STRUCTURE
+# ===============================================================
 @dataclass
-class UeE2DAppReport:
+class UeE2DAppIndication:
     rnti: int = 0
-    numAllocatedRbg: int = 0  # RBGs granted in the last dApp TTI
+    ueId: int = 0  # IMSI, 0 if not known yet
+    numAllocatedRbg: int = 0  # RBGs granted in the last TTI or slot
     sumAllocatedRbg: int = 0  # RBGs granted since the last xApp decision
-    numScheduledTti: int = 0  # TTIs scheduled since the last xApp decision
+    numScheduledTti: int = 0  # TTIs or slots scheduled since the last xApp decision
 
 
 @dataclass
-class E2DAppReport:  # from dApp to xApp
-    type: int = MessageType.E2SM_DAPP_REPORT
+class E2DAppIndication:  # from dApp to xApp
+    type: int = MessageType.E2SM_DAPP_INDICATION
+    dAppId: int = 0
+    ranFunctionId: int = RanFunctionId.DAPP
+    indicationSn: int = 0
     ueSchedSize: int = 0
     totalNumAllocatedRbg: int = 0
     rbgSize: int = 1
     linkDirection: int = LinkDirection.DOWNLINK
-    id: int = 0
-    ue: List[UeE2DAppReport] = field(default_factory=list)
+    ue: List[UeE2DAppIndication] = field(default_factory=list)
 
 
-# == E2SM-DAPP CONTROL STRUCTURE =====================================
+# == E2SM-DAPP CONTROL REQUEST STRUCTURE
+# ===============================================================
 @dataclass
-class UeE2DAppControl:
-    rnti: int = 0
+class UeE2DAppControlRequest:
+    rnti: int = 0  # last known RNTI, for the dApp learning state
+    ueId: int = 0  # IMSI the bound applies to
     maxRbgAllocation: int = 0
 
 
 @dataclass
-class E2DAppControl:  # from xApp to dApp
-    type: int = MessageType.E2SM_DAPP_CONTROL
+class E2DAppControlRequest:  # from xApp to dApp
+    type: int = MessageType.E2SM_DAPP_CONTROL_REQUEST
+    ricRequestorId: int = 0
+    ricInstanceId: int = 0
+    ranFunctionId: int = RanFunctionId.DAPP
+    requestSn: int = 0
     maxUeSchedSize: int = 0
     numAvailableRbg: int = 0
     skipThisStep: bool = False
     linkDirection: int = LinkDirection.DOWNLINK
-    id: int = 0
     decisionId: int = 0  # incremented at every xApp decision, including open-link
-    ue: List[UeE2DAppControl] = field(default_factory=list)
+    ue: List[UeE2DAppControlRequest] = field(default_factory=list)
 
 
 @dataclass
 class E2DappInterface:
-    report: E2DAppReport = field(default_factory=E2DAppReport)
-    control: E2DAppControl = field(default_factory=E2DAppControl)
+    indication: E2DAppIndication = field(default_factory=E2DAppIndication)
+    control: E2DAppControlRequest = field(default_factory=E2DAppControlRequest)

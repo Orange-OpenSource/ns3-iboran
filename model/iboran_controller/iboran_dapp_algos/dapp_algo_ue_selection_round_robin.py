@@ -19,15 +19,13 @@ class DAppAlgoUeSelectionRoundRobin(DAppAlgoUeSelection):
 
         self._reset_variables()
 
-    def process(self, candidates, e3Indication, e2DAppControl, **kwargs) -> bool:
+    def process(self, candidates, e3Indication, e2DAppControlRequest, **kwargs) -> bool:
         "Execute the UE selection."
         _hist_link_rnti_subframe = kwargs.get("_hist_link_rnti_subframe", {})
+        last_ms = _hist_link_rnti_subframe.get(e3Indication.linkDirection, {})
+        # last scheduling time [ms]; a UE never scheduled comes first (-1)
         subframe_candidates = [
-            _hist_link_rnti_subframe.get(e3Indication.linkDirection).get(
-                e3Indication.ue[i].rnti,
-                (e3Indication.frameNo * 10 + e3Indication.subframeNo),
-            )
-            for i in candidates
+            last_ms.get(e3Indication.ue[i].rnti, -1) for i in candidates
         ]
 
         sorted_indices = sorted(

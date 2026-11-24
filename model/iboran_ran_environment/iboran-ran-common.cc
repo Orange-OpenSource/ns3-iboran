@@ -12,6 +12,7 @@
 
 #include "iboran-ran-common.h"
 
+#include "../iboran_application/iboran-side-info-tracker.h"
 #include "iboran-ran-params.h"
 
 #include <algorithm>
@@ -27,7 +28,8 @@ NS_LOG_COMPONENT_DEFINE("IbOranRanCommon");
 namespace ns3
 {
 
-// == P2CPP PARAMS STRUCTURE ==========================================
+// == P2CPP PARAMS STRUCTURE
+// =========================================================
 Py2CppParams
 LoadPy2CppParams(const std::filesystem::path& filepath)
 {
@@ -309,7 +311,8 @@ WriteMessageLogRecord(const std::filesystem::path& outPath,
 
 } // namespace
 
-// == MOBILITY FUNCTIONS ==============================================
+// == MOBILITY FUNCTIONS
+// =========================================================
 void
 SetupBackhaulMobility(const CommonRanParams& commonParams,
                       Ptr<Node> pgw,
@@ -416,7 +419,8 @@ SetupFronthaulMobility(const CommonRanParams& commonParams,
     }
 }
 
-// == APP FUNCTIONS ===================================================
+// == APP FUNCTIONS
+// =========================================================
 void
 SetupIbOranApplications(const CommonRanParams& commonParams,
                         const std::string& ratType,
@@ -836,6 +840,14 @@ SetupNetAnim(const CommonRanParams& commonParams,
     std::cout << std::setw(30) << "Animation setup" << ": OK\n";
 
     return anim;
+}
+
+// == RRC TRACE SINKS
+// =========================================================
+void
+TrackUeId(std::string /*context*/, uint64_t imsi, uint16_t cellId, uint16_t rnti)
+{
+    SideInfoTracker::GetInstance().UpdateUeId(cellId, rnti, imsi);
 }
 
 } // namespace ns3

@@ -1,6 +1,6 @@
 # Application layer
 
-This document describes the application layer that carries the UE payloads: how a payload is typed and ranked by criticality, wrapped in an A2A envelope, cut into packets and rebuilt at the receiver, and what a run records about it. The code, the wire format and a byte-level example are described in the [developer reference](../model/iboran_application/README.md). Paths are relative to `contrib/iboran`.
+This document describes the application layer that carries the UE payloads: how a payload is typed and ranked by content criticality, wrapped in an A2A envelope, cut into packets and rebuilt at the receiver, and what a run records about it. Paths are relative to `contrib/iboran`.
 
 ## Overview
 
@@ -15,7 +15,7 @@ A message goes through four steps:
 
 ## Content types
 
-The data format is set once per run with `--data_format`. It decides which file of a sample is loaded, the bearer QCI, the extension of the saved output and the KPI module that scores it. The application then detects the content type of the loaded file, which decides the element size, the criticality levels and how lost data is filled.
+The data format is set once per run with `--data_format`. It decides which file of a sample is loaded, the QCI (LTE) or 5QI (NR) of the dedicated bearer, the extension of the saved output and the KPI module that scores it. The application then detects the content type of the loaded file, which decides the element size, the content criticality levels and how lost data is filled.
 
 | Data format | Content type | Detected from | Element size (bytes) |
 |---|---|---|---|
@@ -30,10 +30,10 @@ The data format is set once per run with `--data_format`. It decides which file 
 | `TEXT` | `TEXT_UTF8` | `.txt`, `.md`, `.csv`, or `TEXT` | 1 |
 | `TEXT` | `JSON` | `.json` | 1 |
 
-A run loads the input file with the dataset's `input_image_format` for `IMAGE`, and `.f32`, `.mp4` or `.txt` for the other formats. A dataset folder can hold several files of one sample (for example `.jpg` and `.f32`), and the data format selects one. A file whose size is not a whole number of elements is rejected, and a file whose detected type belongs to another format triggers a warning.
+A run loads the input file with the dataset's `input_image_format` for `IMAGE`, and `.f32`, `.mp4` or `.txt` for the other formats. A dataset folder can hold several files of one sample (for example `.jpg` and `.f32`), and the data format selects one.
 
 > [!NOTE]
-> Embeddings and text have no signature. A float16 file named `.f32` is read as float32, and an `EMBEDDING` run always loads `.f32`.
+> A file whose size is not a whole number of elements is rejected, and a file whose detected type belongs to another format triggers a warning. Embeddings and text have no signature, so a float16 file named `.f32` is read as float32.
 
 ## Criticality
 
@@ -57,12 +57,10 @@ Criticality ranks payload bytes from 1, the most critical, to 10, the default. T
 | `H264_ANNEXB` | Non-IDR slice | 5 |
 | `H264_ANNEXB` | SEI, access unit delimiter | 9 |
 | `H264_ANNEXB` | Other NAL units | 8 |
-| Embeddings | All dimensions | 10 |
+| Embeddings | All dimensions, by default | 10 |
 | Other types | All bytes | 10 |
 
 Decaying levels give 3 to the first later IDAT or scan, 4 to the next two, 5 to the next four, and so on up to 9. A baseline JPEG has one scan, so its whole image data is level 2.
-
-A packet takes the lowest level of the bytes it carries. The envelope is level 1, since the receiver needs all of it to read the message. Before each packet is sent, its level is published for the UE and link, where the MAC schedulers read it as the content criticality of the [E3 INDICATION](service-models.md#e3sm-e3-indication).
 
 ## Envelope models
 
@@ -99,7 +97,8 @@ Each packet starts with a 44-byte header that repeats the message ID, the sizes 
 
 Cuts inside the payload fall on whole elements, or on groups of 3 elements under base64, so a lost packet removes whole embedding dimensions only. No packet is reserved for the envelope: its start shares the first packet with the first payload elements, and its end shares the last packet with the last ones. Losing either packet loses those elements as well as the envelope.
 
-With `appFraming: false` and `appEnvelope: None`, no header is sent and the receiver concatenates what arrives, as the original version did. Lost bytes then shift the rest of the payload and cannot be located. Any envelope other than `None` uses the header.
+> [!WARNING]
+> With `appFraming: false` and `appEnvelope: None`, no header is sent and the receiver concatenates what arrives. Lost bytes then shift the rest of the payload and cannot be located. Any envelope other than `None` uses the header.
 
 ## Transmission
 
@@ -111,12 +110,12 @@ The receiver places each packet in its message. A message is delivered when ever
 
 | Policy | Lost element becomes |
 |---|---|
-| `Auto` | NaN for float embeddings, zero bytes otherwise |
+| `Auto` | Same as `Nan` |
 | `Zero` | Zero bytes |
 | `Nan` | NaN for float embeddings, zero bytes otherwise |
 | `Drop` | Removed |
 
-A received embedding therefore keeps its full length, with NaN at the lost dimensions, so `FidelityScore` compares aligned dimensions (see [KPIs](kpis.md#intent-based-kpis)).
+Except with `Drop`, a received embedding therefore keeps its full length, with NaN at the lost dimensions, so `FidelityScore` compares aligned dimensions (see [KPIs](kpis.md#intent-based-kpis)).
 
 | Output | Written when | Content |
 |---|---|---|
@@ -125,11 +124,14 @@ A received embedding therefore keeps its full length, with NaN at the lost dimen
 | `<output_pattern>_s<k>_m<messageId>` with the output extension | `appSaveAllMessages: true` | Each message of sender *k*, numbered from 1 in order of arrival |
 | `notebook/logs/appMessages.json` | `appSaveMessageLog: true` | Per link and UE: what was sent and received (see [message log](#message-log)) |
 
-The output extension is the dataset's `input_image_format` for `IMAGE` (for example `.jpg`) and the default extension of the format otherwise (`.f32`, `.mp4`, `.txt`), as the KPI step expects. When the input file is lost entirely, no output is written and the KPI step skips that UE. Outputs are written when the receivers stop (see [simulation data](simulation-data.md#outputs)). A run with `appSaveMessageLog: false` removes the `appMessages.json` of an earlier run.
+The output extension is the dataset's `input_image_format` for `IMAGE` (for example `.jpg`) and the default extension of the format otherwise (`.f32`, `.mp4`, `.txt`), as the KPI step expects. When the input file is lost entirely, no output is written and the KPI step skips that UE. Outputs are written when the receivers stop (see [simulation data](simulation-data.md#outputs)).
+
+> [!WARNING]
+> A run with `appSaveMessageLog: false` deletes the `appMessages.json` of an earlier run. Copy the file to keep it.
 
 ## Task and context IDs
 
-The receiver acts as the A2A server agent. For each message, it keeps the task and context IDs the sender set, or assigns its own, and records them in the message log. It sends no response, so the sender never learns the IDs it did not set. Task outcomes are not decided by the receiver: the orchestrator judges them from the saved files and the message log.
+The receiver acts as the A2A server agent. For each message, it keeps the task and context IDs the sender set, or assigns its own, and records them in the message log. It sends no response, so the sender never learns the IDs it did not set.
 
 | Identifier | Meaning | Set by |
 |---|---|---|
@@ -182,7 +184,10 @@ With `appSaveMessageLog: true`, `notebook/logs/appMessages.json` holds, per link
 | `outputFile` | File the message was saved to, `null` if not saved |
 | `txTimeNs`, `firstRxNs`, `lastRxNs`, `latencyMs` | Preparation time, first and last packet received, and the time from preparation to the last packet |
 
-A received message and its sent record share `messageId` within one link and UE. A sent message with no received entry was lost entirely. `lastRxNs` minus `firstTxNs` is the time from the first packet sent to the last packet received. With `appFillPolicy: Drop`, the elements in `missingRanges` are absent from the saved file, so later offsets shift.
+A received message and its sent record share `messageId` within one link and UE. A sent message with no received entry was lost entirely. `lastRxNs` minus `firstTxNs` is the time from the first packet sent to the last packet received.
+
+> [!NOTE]
+> With `appFillPolicy: Drop`, the elements in `missingRanges` are absent from the saved file, so later offsets shift.
 
 ## Configuration
 
@@ -201,12 +206,12 @@ Keys under `common` in [`iboranConfig.yaml`](../model/iboran_campaign/iboranConf
 | `appSaveMessageLog` | `false` | Write `notebook/logs/appMessages.json` |
 
 > [!WARNING]
-> A campaign caches results by orchestrator settings only. After changing an `app*` key, delete the [cached results](simulation-data.md#cached-results), or the campaign reuses runs made with the previous setting.
+> After changing an `app*` key, delete the [cached results](simulation-data.md#cached-results).
 
 ## Limits
 
 - The receiver sends no response, so a later message cannot name a task the receiver created.
 - The receiver records no task outcome; the orchestrator judges it from the saved files and the message log.
 - Text is cut on bytes, so a multi-byte UTF-8 character can be split. The JSON envelopes send text and JSON in base64, where A2A would send them as `text` or `data` parts.
-- Criticality is published when a packet is handed to the socket, not when the MAC serves it.
-- `MP4`, `BMP`, embeddings, text and raw payloads have uniform criticality.
+- Content criticality is published when a packet is handed to the socket, not when the MAC serves it.
+- `MP4`, `BMP`, text and raw payloads have no criticality map, so all their bytes are level 10.

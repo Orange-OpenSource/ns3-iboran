@@ -31,6 +31,10 @@ from model.iboran_interfaces.iboran_shm_structure import SHM_SIZE
 from model.iboran_interfaces.iboran_shm_protocol import (
     LinkDirection,
     RatType,
+    Phase,
+    RanFunctionId,
+    RicRequestId,
+    DAPP_ID,
 )
 from model.iboran_intent_producer.iboran_intent_producer_pseudo_random import (
     IbOranIntentProducerPseudoRandom,
@@ -165,7 +169,7 @@ class IbOranOrchestrator:
         ):
             raise FileNotFoundError(
                 f"ib-ORAN Orchestrator: eval mode needs {self._checkpoint_path()}; "
-                f"run IbOranCampaign.pretrain for this pattern first."
+                f"run IbOranCampaign.pretrain for this configuration first."
             )
 
         if self.rat_type == RatType.LTE:
@@ -235,6 +239,7 @@ class IbOranOrchestrator:
 
         print("ib-ORAN Orchestrator: MAC Scheduler xApps and dApps initialized.")
 
+        self.cell_ids = set()
         try:
             start = time.time()
             while True:
@@ -245,16 +250,20 @@ class IbOranOrchestrator:
                     break
                 cpp2Py = shm_interface.GetCpp2PyStruct()
 
-                # invoke the xApp and dApp schedulers
                 shm_interface.PySendBegin()
                 py2Cpp = shm_interface.GetPy2CppStruct()
 
-                self.e2_dapp_.control = self.xapp_scheduler.run(
-                    cpp2Py, py2Cpp, self.e2_dapp_.report
-                )
-                self.e2_dapp_.report = self.dapp_scheduler.run(
-                    cpp2Py, py2Cpp, self.e2_dapp_.control
-                )
+                if cpp2Py.phase == Phase.SETUP:
+                    self._handle_setup(cpp2Py, py2Cpp)
+                else:
+                    # invoke the xApp and dApp schedulers
+                    py2Cpp.phase = Phase.RUN
+                    self.e2_dapp_.control = self.xapp_scheduler.run(
+                        cpp2Py, py2Cpp, self.e2_dapp_.indication
+                    )
+                    self.e2_dapp_.indication = self.dapp_scheduler.run(
+                        cpp2Py, py2Cpp, self.e2_dapp_.control
+                    )
 
                 shm_interface.PySendEnd()
                 shm_interface.PyRecvEnd()
@@ -323,6 +332,24 @@ class IbOranOrchestrator:
             time.sleep(0.1)  # give OS time to fully release
 
         return 0
+
+    def _handle_setup(self, cpp2Py, py2Cpp) -> None:
+        "Answer E2 SETUP and E3 SETUP with the KPM subscription and the dApp ID."
+        request = cpp2Py.setupRequest
+        for function in (RanFunctionId.KPM, RanFunctionId.RC, RanFunctionId.DAPP):
+            if not request.ranFunctionMask & (1 << (function - 1)):
+                raise ValueError(
+                    f"ib-ORAN Orchestrator: cell {request.cellId} "
+                    f"does not offer {function.name}."
+                )
+        self.cell_ids.add(request.cellId)
+
+        py2Cpp.phase = Phase.SETUP
+        response = py2Cpp.setupResponse
+        response.ricRequestorId = RicRequestId.REQUESTOR
+        response.ricInstanceId = RicRequestId.INSTANCE
+        response.kpmReportPeriodMs = 10 * self.xapp_control_period_f  # 1 frame = 10 ms
+        response.dAppId = DAPP_ID
 
     def _checkpoint_path(self) -> Path:
         return (

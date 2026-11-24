@@ -483,6 +483,8 @@ operator<<(std::ostream& os, const SimParams& params)
        << (commonParams.appFraming ? "Enabled" : "Disabled") << "\n"
        << std::setw(30) << "App Envelope" << ": " << std::setw(1) << commonParams.appEnvelope
        << "\n"
+       << std::setw(30) << "App Embedding Prefix Crit." << ": " << std::setw(1)
+       << (commonParams.appEmbeddingPrefixCriticality ? "Enabled" : "Disabled") << "\n"
        << std::setw(30) << "App Fill Policy" << ": " << std::setw(1) << commonParams.appFillPolicy
        << "\n"
        << std::setw(30) << "App Save All Messages" << ": " << std::setw(1)

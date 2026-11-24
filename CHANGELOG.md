@@ -7,6 +7,37 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## 4.0.0 (2026-11-24)
+
+### Added
+- E2 and E3 setup exchange: each MAC scheduler announces its cell and RAN functions, and the apps reply with the KPM reporting period, the RIC request ID and the dApp ID.
+- Control outcome of every E3SM and E2SM-RC CONTROL REQUEST, with a failure cause, counted in the app stats.
+- The RAN rejects an E2SM-RC CONTROL REQUEST whose RAN function ID is not RC, with cause `INVALID_RAN_FUNCTION`.
+- Dedicated NR QoS flow carrying the 5QI of the data format.
+
+### Changed
+- Breaking: messages, structs and algorithm arguments renamed to O-RAN terms (E2AP RIC INDICATION and RIC CONTROL REQUEST, E3 indication and control request, E2SM-DAPP indication and control request). Custom algorithms must rename the `process()` arguments.
+- Breaking: messages carry the RIC request ID, the RAN function ID and sequence numbers instead of `id`, plus the cell ID. Per-UE entries carry the UE ID (IMSI), and E2SM-RC bounds are keyed by UE ID.
+- Breaking: `qci` is renamed `qosId`. It holds the QCI on LTE and the 5QI on NR.
+- The RAN sends E2SM-KPM indications at the subscribed period and marks the other TTIs and slots as not present.
+- Breaking: E2SM-KPM indications carry TS 28.552 measurements: `DRB.UEThpDl/Ul` (kbps) replaces `actualThroughput`, and `DRB.RlcSduTransmittedVolumeDL/UL` (kbit per period) replaces `totalBytesServed`. `collectionStartTime` and `granularityPeriod` replace `timestamp`. `frameNo`, `totalBufferLevel` and `achievableRate` leave KPM. CQI, buffer size, content ID and head-of-line delay are documented as ib-ORAN extensions.
+- Breaking: E3 indications use the KPM names, units and field order for shared per-UE quantities (`drbUeThp` in kbps replaces `actualThroughput`); `totalBytesServed` leaves E3.
+- Breaking: E3SM `achievableRate` is in kbps instead of Mbps, as `drbUeThp`.
+- Breaking: `bufferLevel` and `totalBufferLevel` are renamed `bufferSize` and `totalBufferSize`, after the Buffer Size field of TS 38.321, and the dApp algorithms `TopKBufferLevel`, `GreedyBufferLevel`, `DpBufferLevel` and their `ib` variants are renamed `TopKBufferSize`, `GreedyBufferSize` and `DpBufferSize`. Checkpoints and cached results made under the old names no longer match.
+
+### Removed
+- The developer reference `model/iboran_application/README.md`.
+
+### Fixed
+- The reported QoS ID leaves out SRBs, which made every LTE UE report QCI 1, and follows the 3GPP priority levels.
+- The dApp dropped a UE whose demand exceeded the available RBGs when no xApp bound capped it, which could leave a TTI or slot unscheduled. The grant is now capped at the available RBGs.
+- Round Robin gave the lowest priority to a UE never scheduled, which then waited until the other UEs had emptied their buffers, and compared a time that wraps every 10.24 s with absolute times. A UE never scheduled now comes first.
+- The NR downlink never served a UE with fewer than 16 bytes waiting, which kept the UE active until the end of the run, used up its scheduling turns and lost the last fragment of its message.
+- The image quality KPI downloaded the CLIP model to `contrib/notebook/models/emb/CLIP`, outside ib-ORAN. Both embedding models are now stored in `notebook/models/emb/` of ib-ORAN, whoever loads them.
+
+### Known issues
+- Only one cell is supported. With `xnbNum` above 1, the dApp and the xApp keep one state per link for all cells.
+
 ## 3.0.0 (2026-11-18)
 
 ### Added
@@ -43,7 +74,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Known issues
 - With NR, uplink results may differ between two runs with the same parameters and `--rng_run`. The variation also occurs with the stock 5G-LENA scheduler and is under investigation.
 
-
 ## 2.2.1 (2026-11-07)
 
 ### Added
@@ -59,7 +89,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Broken links and anchors in the README, `CONTRIBUTING.md` and `doc/`.
 - Documentation errors: `nr` listed as required for both RATs, `yaml-cpp` added to the prerequisites, and the per-UE RBG bound of E2SM-RC and E2SM-DAPP given in RBGs instead of PRBs.
 - `quick-setup.sh`: CMake check raised to 3.25+ as required by ns-3.48, Protocol Buffers version check corrected, ns3-ai `python_utils` path fixed, and shebang moved to the first line.
-
 
 ## 2.2.0 (2026-10-29)
 
@@ -85,7 +114,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Non-reproducible UE object-ID assignment in the ns-3 environment.
 - Campaign runs recording KPIs of a previous run after a failure.
 
-
 ## 2.1.0 (2026-08-01)
 
 ### Added
@@ -103,12 +131,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Removed
 - `DataFormat::CUSTOM` is no longer a supported data format.
 
-
 ## 2.0.0 (2026-07-01)
 
 ### Added
 - 3GPP NR RAT support based on the 5G-LENA NR module.
-
 
 ## 1.0.0 (2026-06-01)
 

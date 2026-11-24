@@ -24,7 +24,7 @@ class DAppAlgoUeSelectionRandom(DAppAlgoUeSelection):
         # replication-seeded stream, disjoint from the learners' seeds
         self.rng = np.random.default_rng(3000 * RewardTerms(rat_type).seed)
 
-    def process(self, candidates, e3Indication, e2DAppControl, **kwargs) -> bool:
+    def process(self, candidates, e3Indication, e2DAppControlRequest, **kwargs) -> bool:
         "Execute the UE selection."
         self.selected_idx_k = [
             int(i) for i in self.rng.choice(candidates, self.k, replace=False)

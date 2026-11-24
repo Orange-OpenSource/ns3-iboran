@@ -16,6 +16,7 @@
 
 #include <ns3/applications-module.h>
 #include <ns3/buildings-module.h>
+#include <ns3/component-carrier-enb.h>
 #include <ns3/config-store.h>
 #include <ns3/core-module.h>
 #include <ns3/flow-monitor-module.h>
@@ -292,6 +293,18 @@ main(int argc, char* argv[])
     enbDevs = lteHelper->InstallEnbDevice(enbNodes);
     ueDevs = lteHelper->InstallUeDevice(ueNodes);
 
+    // cell ID of each MAC scheduler, carried in the E2 and E3 indications
+    for (uint32_t i = 0; i < enbDevs.GetN(); ++i)
+    {
+        Ptr<LteEnbNetDevice> enbDev = enbDevs.Get(i)->GetObject<LteEnbNetDevice>();
+        for (const auto& [ccId, cc] : enbDev->GetCcMap())
+        {
+            DynamicCast<ComponentCarrierEnb>(cc)->GetFfMacScheduler()->SetAttribute(
+                "CellId",
+                UintegerValue(cc->GetCellId()));
+        }
+    }
+
     // install the IP stack on the UEs
     internet.Install(ueNodes);
     Ipv4InterfaceContainer ueIpIfaces;
@@ -322,7 +335,7 @@ main(int argc, char* argv[])
         lteHelper->Attach(ueDevs.Get(ueCount), enbDevs.Get(0));
     }
 
-    std::cout << std::setw(30) << "UE attachement to eNodeB" << ": OK" << std::endl;
+    std::cout << std::setw(30) << "UE attachment to eNodeB" << ": OK" << std::endl;
 
     // -- BEARER SETUP ---------------------------------------------------------
     uint8_t qci = GetQciForDataFormat(commonParams.dataFormat);
@@ -380,6 +393,11 @@ main(int argc, char* argv[])
     }
 
     lteHelper->EnableTraces();
+
+    // UE ID (IMSI) of each RNTI, carried in the E2 and E3 indications
+    Config::Connect("/NodeList/*/DeviceList/*/LteEnbRrc/ConnectionEstablished",
+                    MakeCallback(&TrackUeId));
+    Config::Connect("/NodeList/*/DeviceList/*/LteEnbRrc/HandoverEndOk", MakeCallback(&TrackUeId));
 
     // flow monitor setup
     FlowMonitorHelper flowHelper;

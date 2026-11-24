@@ -37,24 +37,13 @@ static const uint16_t MINIMUM_PDU_SIZE = 20; // bytes
 class IbOranLteMacScheduler : public FfMacScheduler
 {
   public:
-    /**
-     * @brief Constructor
-     *
-     * Creates the MAC Scheduler interface implementation
-     */
     IbOranLteMacScheduler();
-
-    /**
-     * Destructor
-     */
     ~IbOranLteMacScheduler() override;
 
     // inherited from Object
     void DoDispose() override;
-    /**
-     * @brief Get the type ID.
-     * @return the object TypeId
-     */
+
+    // Get the type ID.
     static TypeId GetTypeId();
 
     // inherited from FfMacScheduler
@@ -72,241 +61,84 @@ class IbOranLteMacScheduler : public FfMacScheduler
     /// allow MemberSchedSapProvider<IbOranLteMacScheduler> class friend access
     friend class MemberSchedSapProvider<IbOranLteMacScheduler>;
 
-    /**
-     * @brief transmission mode configuration update
-     *
-     * @param rnti the RNTI
-     * @param txMode the transmit mode
-     */
+    // transmission mode configuration update
     void TransmissionModeConfigurationUpdate(uint16_t rnti, uint8_t txMode);
 
   private:
-    //
     // Implementation of the CSCHED API primitives
     // (See 4.1 for description of the primitives)
-    //
-
-    /**
-     * @brief CSched cell config request
-     *
-     * @param params FfMacCschedSapProvider::CschedCellConfigReqParameters
-     */
     void DoCschedCellConfigReq(const FfMacCschedSapProvider::CschedCellConfigReqParameters& params);
 
-    /**
-     * @brief CSched UE config request
-     *
-     * @param params FfMacCschedSapProvider::CschedUeConfigReqParameters
-     */
     void DoCschedUeConfigReq(const FfMacCschedSapProvider::CschedUeConfigReqParameters& params);
 
-    /**
-     * @brief CSched LC config request
-     *
-     * @param params FfMacCschedSapProvider::CschedLcConfigReqParameters
-     */
     void DoCschedLcConfigReq(const FfMacCschedSapProvider::CschedLcConfigReqParameters& params);
 
-    /**
-     * @brief CSched LC release request
-     *
-     * @param params FfMacCschedSapProvider::CschedLcReleaseReqParameters
-     */
     void DoCschedLcReleaseReq(const FfMacCschedSapProvider::CschedLcReleaseReqParameters& params);
 
-    /**
-     * @brief CSched UE release request
-     *
-     * @param params FfMacCschedSapProvider::CschedLcReleaseReqParameters
-     */
     void DoCschedUeReleaseReq(const FfMacCschedSapProvider::CschedUeReleaseReqParameters& params);
 
-    //
     // Implementation of the SCHED API primitives
     // (See 4.2 for description of the primitives)
-    //
-
-    /**
-     * @brief Sched DL RLC buffer request
-     *
-     * @param params FfMacSchedSapProvider::SchedDlRlcBufferReqParameters
-     */
     void DoSchedDlRlcBufferReq(const FfMacSchedSapProvider::SchedDlRlcBufferReqParameters& params);
 
-    /**
-     * @brief Sched DL paging buffer request
-     *
-     * @param params FfMacSchedSapProvider::SchedDlPagingBufferReqParameters
-     */
     void DoSchedDlPagingBufferReq(
         const FfMacSchedSapProvider::SchedDlPagingBufferReqParameters& params);
 
-    /**
-     * @brief Sched DL MAC buffer request
-     *
-     * @param params FfMacSchedSapProvider::SchedDlMacBufferReqParameters
-     */
     void DoSchedDlMacBufferReq(const FfMacSchedSapProvider::SchedDlMacBufferReqParameters& params);
 
-    /**
-     * @brief Sched DL trigger request
-     *
-     * @param params FfMacSchedSapProvider::SchedDlTriggerReqParameters
-     */
     void DoSchedDlTriggerReq(const FfMacSchedSapProvider::SchedDlTriggerReqParameters& params);
 
-    /**
-     * @brief Sched DL RACH info request
-     *
-     * @param params FfMacSchedSapProvider::SchedDlRachInfoReqParameters
-     */
     void DoSchedDlRachInfoReq(const FfMacSchedSapProvider::SchedDlRachInfoReqParameters& params);
 
-    /**
-     * @brief Sched DL CQI info request
-     *
-     * @param params FfMacSchedSapProvider::SchedDlCqiInfoReqParameters
-     */
     void DoSchedDlCqiInfoReq(const FfMacSchedSapProvider::SchedDlCqiInfoReqParameters& params);
 
-    /**
-     * @brief Sched UL trigger request
-     *
-     * @param params FfMacSchedSapProvider::SchedUlTriggerReqParameters
-     */
     void DoSchedUlTriggerReq(const FfMacSchedSapProvider::SchedUlTriggerReqParameters& params);
 
-    /**
-     * @brief Sched UL noise interference request
-     *
-     * @param params FfMacSchedSapProvider::SchedUlNoiseInterferenceReqParameters
-     */
     void DoSchedUlNoiseInterferenceReq(
         const FfMacSchedSapProvider::SchedUlNoiseInterferenceReqParameters& params);
 
-    /**
-     * @brief Sched UL SR info request
-     *
-     * @param params FfMacSchedSapProvider::SchedUlSrInfoReqParameters
-     */
     void DoSchedUlSrInfoReq(const FfMacSchedSapProvider::SchedUlSrInfoReqParameters& params);
 
-    /**
-     * @brief Sched UL MAC control info request
-     *
-     * @param params FfMacSchedSapProvider::SchedUlMacCtrlInfoReqParameters
-     */
     void DoSchedUlMacCtrlInfoReq(
         const FfMacSchedSapProvider::SchedUlMacCtrlInfoReqParameters& params);
 
-    /**
-     * @brief Sched UL CQI info request
-     *
-     * @param params FfMacSchedSapProvider::SchedUlCqiInfoReqParameters
-     */
     void DoSchedUlCqiInfoReq(const FfMacSchedSapProvider::SchedUlCqiInfoReqParameters& params);
 
-    /**
-     * @brief Get RBG size
-     *
-     * @param dlbandwidth dDL bandwidth
-     * @returns the RBG size
-     */
     int GetRbgSize(int dlbandwidth);
 
-    /**
-     * @brief Calculate CQI from SINR
-     *
-     * @param sinr the SINR
-     * @returns the CQI
-     */
     uint8_t GetCqiFromSinr(double sinr);
 
-    /**
-     * @brief Calculate QCI for RNTI
-     *
-     * @param rnti the RNTI
-     * @returns the QCI
-     */
     uint8_t GetQciForRnti(uint16_t rnti);
 
-    /**
-     * @brief Store QCI information
-     *
-     * @param rnti the RNTI
-     * @param lcid the LCID
-     * @param qci the QCI
-     */
     void StoreQciInfo(uint16_t rnti, uint8_t lcid, uint8_t qci);
 
-    /**
-     * @brief Sort RLC buffer reports by RNTI in ascending order
-     *
-     * @param i the first RLC buffer report to compare
-     * @param j the second RLC buffer report to compare
-     * @returns true if i.m_rnti < j.m_rnti, false otherwise
-     */
+    // E2 SETUP and E3 SETUP round-trip, run once before the first indication.
+    void DoSetupExchange();
+
+    // DRB.RlcSduTransmittedVolumeDL/UL of the reported UEs since the previous indication.
+    void FillKpmVolume(E2KpmIndication* e2KpmIndication, LinkDirection direction);
+
+    // Sort RLC buffer reports by RNTI in ascending order
     static bool SortRlcBufferReq(FfMacSchedSapProvider::SchedDlRlcBufferReqParameters i,
                                  FfMacSchedSapProvider::SchedDlRlcBufferReqParameters j);
 
-    /**
-     * @brief LC active per flow
-     *
-     * @param rnti the RNTI
-     * @returns the LC active per flow
-     */
     unsigned int LcActivePerFlow(uint16_t rnti);
 
-    /**
-     * @brief Estimate UL SINR
-     *
-     * @param rnti the RNTI
-     * @param rb the RB
-     * @returns the SINR
-     */
     double EstimateUlSinr(uint16_t rnti, uint16_t rb);
 
-    /// Refresh DL CQI maps
     void RefreshDlCqiMaps();
-    /// Refresh UL CQI maps
     void RefreshUlCqiMaps();
 
-    /**
-     * @brief Update DL RCL buffer info
-     *
-     * @param rnti the RNTI
-     * @param lcid the LCID
-     * @param size the size
-     */
     void UpdateDlRlcBufferInfo(uint16_t rnti, uint8_t lcid, uint16_t size);
-    /**
-     * @brief Update UL RCL buffer info
-     *
-     * @param rnti the RNTI
-     * @param size the size
-     */
     void UpdateUlRlcBufferInfo(uint16_t rnti, uint16_t size);
 
-    /**
-     * @brief Update and return a new process Id for the RNTI specified
-     *
-     * @param rnti the RNTI of the UE to be updated
-     * @return the process id  value
-     */
+    // Update and return a new process Id for the RNTI specified
     uint8_t UpdateHarqProcessId(uint16_t rnti);
 
-    /**
-     * @brief Return the availability of free process for the RNTI specified
-     *
-     * @param rnti the RNTI of the UE to be updated
-     * @return the availability
-     */
+    // Return the availability of free process for the RNTI specified
     bool HarqProcessAvailability(uint16_t rnti);
 
-    /**
-     * @brief Refresh HARQ processes according to the timers
-     *
-     */
+    // Refresh HARQ processes according to the timers
     void RefreshHarqProcesses();
 
     Ptr<LteAmc> m_amc; ///< AMC
@@ -350,13 +182,9 @@ class IbOranLteMacScheduler : public FfMacScheduler
     std::map<uint16_t, uint32_t> m_ueCqiTimers;
 
     /**
-     * Map of UEs' timers on QCI
+     * Map of UEs' QCI per LCID
      */
     std::map<uint16_t, std::map<uint8_t, uint8_t>> m_ueQci;
-    /**
-     * Map of UEs' timers on highest priority QCI
-     */
-    std::map<uint16_t, uint8_t> m_ueHighestPriorityQci;
 
     /**
      * Map of UE's buffer status reports received
@@ -416,17 +244,29 @@ class IbOranLteMacScheduler : public FfMacScheduler
     // Shared memory interface
     Ns3AiMsgInterfaceImpl<Cpp2Py, Py2Cpp>* m_shmInterface;
 
-    // Per-direction message ID counters
-    uint32_t m_dlE3IndicationId{0};
-    uint32_t m_ulE3IndicationId{0};
-    uint32_t m_dlE2KpmReportId{0};
-    uint32_t m_ulE2KpmReportId{0};
+    // E2 and E3 session state, set by DoSetupExchange()
+    bool m_setupDone{false};
+    uint16_t m_cellId{0}; ///< set through the CellId attribute
+    uint16_t m_ricRequestorId{0};
+    uint16_t m_ricInstanceId{0};
+    uint16_t m_dAppId{0};
+    uint32_t m_kpmReportPeriodFrames{0}; ///< 0: every TTI
+    uint64_t m_lastKpmFrame[2]{0, 0};    ///< per LinkDirection
+    ControlOutcome m_outcome[2]{};       ///< per LinkDirection
+
+    // Per-direction message sequence numbers
+    uint32_t m_dlE3IndicationSn{0};
+    uint32_t m_ulE3IndicationSn{0};
+    uint32_t m_dlE2KpmIndicationSn{0};
+    uint32_t m_ulE2KpmIndicationSn{0};
 
     // Per-UE tracking
     std::map<uint16_t, uint32_t> m_ueDlTotalBytesServed;
     std::map<uint16_t, uint32_t> m_ueUlTotalBytesServed;
-    std::map<uint16_t, uint16_t> m_ueDlMaxRbgAllocation;
-    std::map<uint16_t, uint16_t> m_ueUlMaxRbgAllocation;
+    std::map<uint64_t, uint16_t> m_ueDlMaxRbgAllocation; ///< keyed by UE ID
+    std::map<uint64_t, uint16_t> m_ueUlMaxRbgAllocation; ///< keyed by UE ID
+    std::map<uint16_t, uint32_t> m_ueDlBytesServedAtLastKpm;
+    std::map<uint16_t, uint32_t> m_ueUlBytesServedAtLastKpm;
 
     // Throughput tracking
     ThroughputTracker m_dlTput{100.0};

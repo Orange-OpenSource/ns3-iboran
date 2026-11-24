@@ -8,7 +8,7 @@
 #
 # Authors: see CONTRIBUTORS.md
 
-import numpy as np
+
 from .xapp_algo_rbg_bounding import XAppAlgoRbgBounding
 
 
@@ -20,11 +20,11 @@ class XAppAlgoRbgBoundingClamp(XAppAlgoRbgBounding):
 
         self._reset_variables()
 
-    def process(self, candidates, e2KpmReport, e2DAppReport, **kwargs) -> bool:
+    def process(self, candidates, e2KpmIndication, e2DAppIndication, **kwargs) -> bool:
         "Execute the RBG bounding."
         self.candidate_idx = candidates
         self.bounded_rbg = self._derive_rbg_needed(
-            e2KpmReport, input_idx_vect=self.candidate_idx
+            e2KpmIndication, input_idx_vect=self.candidate_idx
         )
 
         return True

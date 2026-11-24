@@ -39,7 +39,8 @@
 namespace ns3
 {
 
-// == P2CPP PARAMS STRUCTURE ==========================================
+// == P2CPP PARAMS STRUCTURE
+// =========================================================
 struct Py2CppParams
 {
     std::string id;
@@ -62,7 +63,8 @@ std::string ResolveInputFile(const std::filesystem::path& baseDir,
                              const std::map<std::string, std::string>& values,
                              std::mt19937& gen);
 
-// == MOBILITY FUNCTIONS ==============================================
+// == MOBILITY FUNCTIONS
+// =========================================================
 void SetupBackhaulMobility(const CommonRanParams& commonParams,
                            Ptr<Node> pgw,
                            Ptr<Node> sgw,
@@ -74,7 +76,8 @@ void SetupFronthaulMobility(const CommonRanParams& commonParams,
                             NodeContainer& xnbNodes,
                             NodeContainer& ueNodes);
 
-// == APP FUNCTIONS ===================================================
+// == APP FUNCTIONS
+// =========================================================
 void SetupIbOranApplications(const CommonRanParams& commonParams,
                              const std::string& ratType,
                              NodeContainer& ueNodes,
@@ -91,7 +94,8 @@ void PrintApplicationStats(const CommonRanParams& commonParams,
                            ApplicationContainer& txApps,
                            ApplicationContainer& rxApps);
 
-// == ANIMATION FUNCTIONS =============================================
+// == ANIMATION FUNCTIONS
+// =========================================================
 AnimationInterface* SetupNetAnim(const CommonRanParams& commonParams,
                                  const std::string& ratType,
                                  Ptr<Node> remoteHost,
@@ -101,6 +105,10 @@ AnimationInterface* SetupNetAnim(const CommonRanParams& commonParams,
                                  NodeContainer& xnbNodes,
                                  NodeContainer& ueNodes,
                                  const std::string& outputFile);
+
+// == RRC TRACE SINKS
+// =========================================================
+void TrackUeId(std::string context, uint64_t imsi, uint16_t cellId, uint16_t rnti);
 
 } // namespace ns3
 

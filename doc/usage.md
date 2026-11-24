@@ -7,6 +7,7 @@ This document describes how to run ib-ORAN simulations and campaigns. Paths are 
 A single simulation runs from `model/iboran_campaign`, in the virtual environment set up during [installation](installation.md#step-4-run-the-setup-script):
 
 ```shell
+cd model/iboran_campaign
 source ../../../../.venv/bin/activate
 python3 iboran_run.py [--rat_type RAT_TYPE] [--k K] [--dapp_algo_ue_selection ALGO] ...
 ```
@@ -54,7 +55,7 @@ A campaign caches the KPI records of each run and reuses them on the next call w
 
 ## Reproducibility
 
-`--rng_run` fixes one replication. Two runs with the same parameters and the same `--rng_run` give identical results. Every random element derives from it: the ns-3 random variable streams, the assignment of object IDs to UEs, the generated intents and the `Random` scheduler. Runs of different algorithms with the same `--rng_run` share the same channel and traffic realization, which allows paired comparisons. `IbOranCampaign` uses `--rng_run = mc_idx + 1` for Monte Carlo iteration `mc_idx`.
+`--rng_run` fixes one replication. Every random element derives from it: the ns-3 random variable streams, the assignment of object IDs to UEs, the generated intents and the `Random` scheduler. Runs of different algorithms with the same `--rng_run` share the same channel and traffic realization, so they can be compared in pairs. `IbOranCampaign` uses `--rng_run = mc_idx + 1` for Monte Carlo iteration `mc_idx`.
 
 > [!NOTE]
-> With NR, uplink results may differ between two runs with the same parameters and `--rng_run`. Compare algorithms over several replications rather than a single run.
+> Two runs with the same parameters and `--rng_run` give identical results, except on the NR uplink, where results can differ between runs. Compare algorithms over several replications rather than a single run.

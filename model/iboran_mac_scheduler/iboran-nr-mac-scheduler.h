@@ -90,16 +90,27 @@ class IbOranNrMacScheduler : public NrMacSchedulerOfdma
     // Shared memory interface
     Ns3AiMsgInterfaceImpl<Cpp2Py, Py2Cpp>* m_shmInterface{nullptr};
 
+    // E2 and E3 session state, set by DoSetupExchange()
+    mutable bool m_setupDone{false};
+    mutable uint16_t m_ricRequestorId{0};
+    mutable uint16_t m_ricInstanceId{0};
+    mutable uint16_t m_dAppId{0};
+    mutable uint32_t m_kpmReportPeriodFrames{0}; ///< 0: every slot
+    mutable uint64_t m_lastKpmFrame[2]{0, 0};    ///< per LinkDirection
+    mutable ControlOutcome m_outcome[2]{};       ///< per LinkDirection
+
     // mutable: AssignDLRBG/AssignULRBG are const per base-class contract
-    mutable uint32_t m_dlE3IndicationId{0};
-    mutable uint32_t m_dlE2KpmReportId{0};
-    mutable uint32_t m_ulE3IndicationId{0};
-    mutable uint32_t m_ulE2KpmReportId{0};
+    mutable uint32_t m_dlE3IndicationSn{0};
+    mutable uint32_t m_dlE2KpmIndicationSn{0};
+    mutable uint32_t m_ulE3IndicationSn{0};
+    mutable uint32_t m_ulE2KpmIndicationSn{0};
 
     mutable std::map<uint16_t, uint32_t> m_ueDlTotalBytesServed;
     mutable std::map<uint16_t, uint32_t> m_ueUlTotalBytesServed;
-    mutable std::map<uint16_t, uint16_t> m_ueDlMaxRbgAllocation;
-    mutable std::map<uint16_t, uint16_t> m_ueUlMaxRbgAllocation;
+    mutable std::map<uint64_t, uint16_t> m_ueDlMaxRbgAllocation; ///< keyed by UE ID
+    mutable std::map<uint64_t, uint16_t> m_ueUlMaxRbgAllocation; ///< keyed by UE ID
+    mutable std::map<uint16_t, uint32_t> m_ueDlBytesServedAtLastKpm;
+    mutable std::map<uint16_t, uint32_t> m_ueUlBytesServedAtLastKpm;
 
     mutable ThroughputTracker m_dlTput{100.0};
     mutable ThroughputTracker m_ulTput{100.0};
@@ -108,8 +119,8 @@ class IbOranNrMacScheduler : public NrMacSchedulerOfdma
     mutable WaitingTimeTracker m_ulWaiting;
 
     /**
-     * @brief Per-UE allocation cached by AssignDLRBG / AssignULRBG and read
-     *        by CreateDlDci / CreateUlDci within the same scheduling slot.
+     * Per-UE allocation cached by AssignDLRBG / AssignULRBG and read
+     * by CreateDlDci / CreateUlDci within the same scheduling slot.
      */
     struct PendingAlloc
     {
@@ -124,23 +135,27 @@ class IbOranNrMacScheduler : public NrMacSchedulerOfdma
     mutable std::map<uint16_t, PendingAlloc> m_pendingDlAlloc; ///< keyed by RNTI
     mutable std::map<uint16_t, PendingAlloc> m_pendingUlAlloc; ///< keyed by RNTI
 
-    /** @brief Linear SINR → wideband CQI [1,15] (3GPP TS 36.213 Table 7.2.3-1). */
+    // Linear SINR → wideband CQI [1,15] (3GPP TS 36.213 Table 7.2.3-1).
     uint8_t GetCqiFromSinrLinear(double sinrLinear) const;
 
     /**
-     * @brief Highest-priority QCI across all LCs in one UE direction.
-     *
-     * Uses NrMacSchedulerLCG::GetLCId() and NrMacSchedulerLCG::GetQci() to
-     * inspect actual QCI values.  GBR (1–4) beats non-GBR (5–9); within a
-     * class, lower index wins.  Returns 9 when no LCs are present.
+     * 5QI with the best priority level (TS 23.501 Table 5.7.4-1) across
+     * the DRBs of one UE direction. SRBs (LCID 0-2) are left out.
+     * Returns 9 when the UE has no DRB.
      */
-    uint8_t GetHighestPriorityQci(const std::unordered_map<uint8_t, LCGPtr>& lcgMap) const;
+    uint8_t GetHighestPriorityFiveQi(const std::unordered_map<uint8_t, LCGPtr>& lcgMap) const;
+
+    // E2 SETUP and E3 SETUP round-trip, run once before the first indication.
+    void DoSetupExchange() const;
+
+    // DRB.RlcSduTransmittedVolumeDL/UL of the reported UEs since the previous indication.
+    void FillKpmVolume(E2KpmIndication* e2KpmIndication, LinkDirection direction) const;
 
     /**
-     * @brief Populate one UE entry in E3Indication + E2KpmReport structs.
+     * Populate one UE entry in E3Indication + E2KpmIndication structs.
      *
      * Fills CQI, MCS, buffer size, throughput, packet-delay, bytes served,
-     * content criticality, content ID, and QCI from ueInfo and tracking maps.
+     * content criticality, content ID, and QoS ID and UE ID from ueInfo and tracking maps.
      */
     void FillUeIndication(const std::shared_ptr<NrMacSchedulerUeInfo>& ueInfo,
                           uint32_t totalBuffer,
@@ -149,13 +164,9 @@ class IbOranNrMacScheduler : public NrMacSchedulerOfdma
                           bool isUl,
                           uint32_t symAvail,
                           E3Indication* e3Indication,
-                          E2KpmReport* e2KpmReport) const;
+                          E2KpmIndication* e2KpmIndication) const;
 
-    /**
-     * @brief Get current time slot information
-     *
-     * @returns the frame, subframe, and slot numbers
-     */
+    // Get current time slot information
     struct SlotInfo
     {
         uint32_t frameNo;

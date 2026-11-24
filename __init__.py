@@ -1,25 +1,31 @@
 from model.iboran_interfaces.iboran_shm_structure import (
-    E2KpmReport,
-    UeE2KpmReport,
-    E2RcControl,
-    UeE2RcControl,
+    E2KpmIndication,
+    UeE2KpmIndication,
+    E2RcControlRequest,
+    UeE2RcControlRequest,
     E3Indication,
     UeE3Indication,
-    E3Control,
-    UeE3Control,
+    E3ControlRequest,
+    UeE3ControlRequest,
     Cpp2Py,
     Py2Cpp,
 )
 from model.iboran_interfaces.iboran_e2sm_dapp_structure import (
-    E2DAppControl,
-    E2DAppReport,
+    E2DAppControlRequest,
+    E2DAppIndication,
     E2DappInterface,
 )
+
 from model.iboran_interfaces.iboran_shm_protocol import (
     LinkDirection,
     RatType,
     MessageType,
     ProtocolLimits,
+    Phase,
+    RanFunctionId,
+    RicRequestId,
+    ControlCause,
+    DAPP_ID,
 )
 
 from model.iboran_campaign.iboran_orchestrator import IbOranOrchestrator

@@ -265,7 +265,33 @@ main(int argc, char* argv[])
         nrHelper->AttachToGnb(ueDevs.Get(ueCount), gnbDevs.Get(0));
     }
 
-    std::cout << std::setw(30) << "UE attachement to gNB" << ": OK" << std::endl;
+    std::cout << std::setw(30) << "UE attachment to gNB" << ": OK" << std::endl;
+
+    // -- QOS FLOW SETUP -------------------------------------------------------
+    const uint8_t fiveQi = GetQciForDataFormat(commonParams.dataFormat); // 2, 3 or 9
+    NrQosFlow flow;
+
+    if (IsGbrBearer(fiveQi))
+    {
+        NrGbrQosInformation gbrQos;
+        gbrQos.gbrDl = commonParams.appDlBitRate;
+        gbrQos.gbrUl = commonParams.appUlBitRate;
+        gbrQos.mbrDl = commonParams.appDlBitRate * 1.2;
+        gbrQos.mbrUl = commonParams.appUlBitRate * 1.2;
+        flow = NrQosFlow(static_cast<NrQosFlow::FiveQi>(fiveQi), gbrQos);
+    }
+    else
+    {
+        flow = NrQosFlow(static_cast<NrQosFlow::FiveQi>(fiveQi));
+    }
+
+    // activate for all UEs
+    for (uint32_t ueCount = 0; ueCount < ueDevs.GetN(); ++ueCount)
+    {
+        nrHelper->ActivateDedicatedQosFlow(ueDevs.Get(ueCount), flow, NrQosRule::Default());
+    }
+
+    std::cout << std::setw(30) << "QoS flow setup" << ": OK" << std::endl;
 
     // -- APPLICATION SETUP ----------------------------------------------------
     ApplicationContainer txApps;
@@ -297,6 +323,11 @@ main(int argc, char* argv[])
     }
 
     nrHelper->EnableTraces();
+
+    // UE ID (IMSI) of each RNTI, carried in the E2 and E3 indications
+    Config::Connect("/NodeList/*/DeviceList/*/NrGnbRrc/ConnectionEstablished",
+                    MakeCallback(&TrackUeId));
+    Config::Connect("/NodeList/*/DeviceList/*/NrGnbRrc/HandoverEndOk", MakeCallback(&TrackUeId));
 
     // flow monitor setup
     FlowMonitorHelper flowHelper;

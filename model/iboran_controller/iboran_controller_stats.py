@@ -8,6 +8,7 @@
 #
 # Authors: see CONTRIBUTORS.md
 
+from collections import Counter
 from model.iboran_interfaces.iboran_shm_protocol import LinkDirection
 
 
@@ -17,6 +18,11 @@ class IbOranControllerStats:
         self.decisions = {LinkDirection.DOWNLINK: 0, LinkDirection.UPLINK: 0}
         self.decision_time = {LinkDirection.DOWNLINK: 0.0, LinkDirection.UPLINK: 0.0}
         self.errors = []
+        self.failures = {
+            LinkDirection.DOWNLINK: Counter(),
+            LinkDirection.UPLINK: Counter(),
+        }
+        self.rejected_ue = {LinkDirection.DOWNLINK: 0, LinkDirection.UPLINK: 0}
 
     def print_stats(self, kind: str, app_id: str) -> None:
         header = f"-- {kind} {app_id}: Stats "
@@ -39,6 +45,13 @@ class IbOranControllerStats:
                     1000 * self.decision_time[link] / self.decisions[link]
                 )
                 print(f"{'Avg decision time':<22}: {avg_decision_time:.2f} ms")
+            if self.failures[link]:
+                causes = ", ".join(f"{c} x{n}" for c, n in self.failures[link].items())
+                print(
+                    f"{'Failed requests':<22}: {sum(self.failures[link].values())} ({causes})"
+                )
+            if self.rejected_ue[link]:
+                print(f"{'Rejected UE entries':<22}: {self.rejected_ue[link]}")
             print()
 
         print(f"{'Errors encountered':<22}: {len(self.errors)}")

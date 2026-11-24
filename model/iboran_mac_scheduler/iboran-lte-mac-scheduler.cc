@@ -16,6 +16,7 @@
 
 #include "ns3/ff-mac-scheduler.h"
 #include <ns3/boolean.h>
+#include <ns3/eps-bearer.h>
 #include <ns3/log.h>
 #include <ns3/lte-amc.h>
 #include <ns3/lte-common.h>
@@ -132,7 +133,12 @@ IbOranLteMacScheduler::GetTypeId()
                           "The MCS of the UL grant, must be [0..15] (default 0)",
                           UintegerValue(0),
                           MakeUintegerAccessor(&IbOranLteMacScheduler::m_ulGrantMcs),
-                          MakeUintegerChecker<uint8_t>());
+                          MakeUintegerChecker<uint8_t>())
+            .AddAttribute("CellId",
+                          "Cell ID of the eNodeB this scheduler serves, set by the environment",
+                          UintegerValue(0),
+                          MakeUintegerAccessor(&IbOranLteMacScheduler::m_cellId),
+                          MakeUintegerChecker<uint16_t>());
     return tid;
 }
 
@@ -282,6 +288,7 @@ IbOranLteMacScheduler::DoCschedUeReleaseReq(
     m_ulHarqProcessesStatus.erase(params.m_rnti);
     m_ulHarqProcessesDciBuffer.erase(params.m_rnti);
     m_ceBsrRxed.erase(params.m_rnti);
+    m_ueQci.erase(params.m_rnti);
     m_ulTput.Erase(params.m_rnti);
     auto it = m_rlcBufferReq.begin();
     while (it != m_rlcBufferReq.end())
@@ -394,60 +401,91 @@ IbOranLteMacScheduler::GetCqiFromSinr(double sinr)
 void
 IbOranLteMacScheduler::StoreQciInfo(uint16_t rnti, uint8_t lcid, uint8_t qci)
 {
-    auto itRnti = m_ueQci.find(rnti);
-    if (itRnti == m_ueQci.end())
-    {
-        std::map<uint8_t, uint8_t> lcidQciMap;
-        lcidQciMap[lcid] = qci;
-        m_ueQci[rnti] = lcidQciMap;
-    }
-    else
-    {
-        itRnti->second[lcid] = qci;
-    }
-
-    auto itHighest = m_ueHighestPriorityQci.find(rnti);
-    if (itHighest == m_ueHighestPriorityQci.end())
-    {
-        m_ueHighestPriorityQci[rnti] = qci;
-    }
-    else
-    {
-        if (qci <= 4 && qci < itHighest->second)
-        {
-            itHighest->second = qci;
-        }
-        else if (qci > 4 && itHighest->second > 4 && qci < itHighest->second)
-        {
-            itHighest->second = qci;
-        }
-    }
+    m_ueQci[rnti][lcid] = qci;
 }
 
 uint8_t
 IbOranLteMacScheduler::GetQciForRnti(uint16_t rnti)
 {
-    auto it = m_ueHighestPriorityQci.find(rnti);
-    if (it != m_ueHighestPriorityQci.end())
-    {
-        return it->second;
-    }
+    // SRB0-2 are left out: the RRC gives SRB1 QCI 1 only because the FF API
+    // requires one, which made every UE report QCI 1.
+    uint8_t best = EpsBearer::NGBR_VIDEO_TCP_DEFAULT; // QCI 9
+    uint8_t bestPriority = UINT8_MAX;
 
     auto itQci = m_ueQci.find(rnti);
-    if (itQci != m_ueQci.end() && !itQci->second.empty())
+    if (itQci == m_ueQci.end())
     {
-        uint8_t highestPriorityQci = 9;
-        for (auto& lcPair : itQci->second)
-        {
-            if (lcPair.second < highestPriorityQci)
-            {
-                highestPriorityQci = lcPair.second;
-            }
-        }
-        return highestPriorityQci;
+        return best;
     }
+    for (const auto& [lcid, qci] : itQci->second)
+    {
+        if (lcid < 3)
+        {
+            continue;
+        }
+        const uint8_t priority = EpsBearer(static_cast<EpsBearer::Qci>(qci)).GetPriority();
+        if (priority < bestPriority)
+        {
+            bestPriority = priority;
+            best = qci;
+        }
+    }
+    return best;
+}
 
-    return 9;
+void
+IbOranLteMacScheduler::DoSetupExchange()
+{
+    // E2 SETUP and E3 SETUP: announce the cell and its RAN functions
+    m_shmInterface->CppSendBegin();
+    Cpp2Py* cpp2Py = m_shmInterface->GetCpp2PyStruct();
+    InitCpp2Py(cpp2Py);
+    cpp2Py->phase = PHASE_SETUP;
+    cpp2Py->setupRequest.cellId = m_cellId;
+    cpp2Py->setupRequest.ranFunctionMask = (1u << (RAN_FUNCTION_ID_KPM - 1)) |
+                                           (1u << (RAN_FUNCTION_ID_RC - 1)) |
+                                           (1u << (RAN_FUNCTION_ID_DAPP - 1));
+    m_shmInterface->CppSendEnd();
+
+    // RIC SUBSCRIPTION and E3 SETUP RESPONSE
+    m_shmInterface->CppRecvBegin();
+    const Py2Cpp* py2Cpp = m_shmInterface->GetPy2CppStruct();
+    if (py2Cpp->phase == PHASE_SETUP)
+    {
+        m_ricRequestorId = py2Cpp->setupResponse.ricRequestorId;
+        m_ricInstanceId = py2Cpp->setupResponse.ricInstanceId;
+        m_kpmReportPeriodFrames = py2Cpp->setupResponse.kpmReportPeriodMs / 10;
+        m_dAppId = py2Cpp->setupResponse.dAppId;
+    }
+    else
+    {
+        NS_LOG_WARN("Setup: no subscription received, reporting KPM every TTI");
+    }
+    m_shmInterface->CppRecvEnd();
+    m_setupDone = true;
+}
+
+void
+IbOranLteMacScheduler::FillKpmVolume(E2KpmIndication* e2KpmIndication, LinkDirection direction)
+{
+    const auto& servedNow = (direction == UPLINK) ? m_ueUlTotalBytesServed : m_ueDlTotalBytesServed;
+    auto& servedAtLast =
+        (direction == UPLINK) ? m_ueUlBytesServedAtLastKpm : m_ueDlBytesServedAtLastKpm;
+
+    for (uint32_t i = 0; i < e2KpmIndication->numUe; ++i)
+    {
+        const uint16_t rnti = e2KpmIndication->ue[i].rnti;
+        const auto itNow = servedNow.find(rnti);
+        const auto itLast = servedAtLast.find(rnti);
+        const uint64_t now = (itNow != servedNow.end()) ? itNow->second : 0;
+        const uint64_t last = (itLast != servedAtLast.end()) ? itLast->second : 0;
+        // difference of cumulative kbit, so rounding does not add up over periods
+        const uint64_t lastKbit = (now >= last) ? last * 8 / 1000 : 0;
+        e2KpmIndication->ue[i].drbRlcSduVolume =
+            static_cast<uint32_t>(now * 8 / 1000 - lastKbit); // kbit
+        // only reported UEs move their mark: an unreported UE keeps its volume
+        servedAtLast[rnti] = static_cast<uint32_t>(now);
+    }
 }
 
 bool
@@ -814,7 +852,7 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
                 auto it = m_dlHarqProcessesStatus.find(rnti);
                 if (it == m_dlHarqProcessesStatus.end())
                 {
-                    NS_LOG_ERROR("No info find in HARQ buffer for UE (might change eNB) "
+                    NS_LOG_ERROR("No info find in HARQ buffer for UE (might change eNodeB) "
                                  << m_dlInfoListBuffered.at(i).m_rnti);
                 }
                 (*it).second.at(harqId) = 0;
@@ -1031,13 +1069,20 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
     }
 
     // -- SHARED-MEMORY INTERFACE (CPP2PY) ---------------------------
+    if (!m_setupDone)
+    {
+        DoSetupExchange();
+    }
     m_shmInterface->CppSendBegin();
     Cpp2Py* cpp2Py = m_shmInterface->GetCpp2PyStruct();
     E3Indication* e3Indication = &(cpp2Py->e3Indication);
-    E2KpmReport* e2KpmReport = &(cpp2Py->e2KpmReport);
+    E2KpmIndication* e2KpmIndication = &(cpp2Py->e2KpmIndication);
 
     InitE3Indication(e3Indication);
-    InitE2KpmReport(e2KpmReport);
+    InitE2KpmIndication(e2KpmIndication);
+
+    cpp2Py->phase = PHASE_RUN;
+    cpp2Py->controlOutcome = m_outcome[DOWNLINK];
 
     int rbgStart = 0;
     for (size_t i = 0; i < rbgMap.size(); i++)
@@ -1105,43 +1150,42 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
         std::map<uint16_t, uint8_t>::iterator itCqi = m_p10CqiRxed.find(rnti);
         uint8_t rntiCqi = (itCqi != m_p10CqiRxed.end()) ? (*itCqi).second : 1;
 
-        // Full-band rate at current CQI (TBS bits per 1 ms TTI -> Mbps)
+        // full-band rate at current CQI (TBS bits per 1 ms TTI = kbps)
         const uint8_t rntiMcsFull = m_amc->GetMcsFromCqi(rntiCqi);
         const double rntiAchievableRate =
-            m_amc->GetDlTbSizeFromMcs(rntiMcsFull, rbgNum * rbgSize) / 1e3;
+            static_cast<double>(m_amc->GetDlTbSizeFromMcs(rntiMcsFull, rbgNum * rbgSize));
         const double rntiActualThroughput = m_dlTput.GetMbps(rnti, nowNs);
 
         uint8_t rntiQci = GetQciForRnti(rnti);
+        const uint64_t ueId = SideInfoTracker::GetInstance().GetUeId(m_cellId, rnti);
 
         const uint32_t rntiPacketDelay = m_dlWaiting.GetWaitingMs(rnti, nowNs);
 
-        uint32_t rntiTotalBytesServed = 0;
-        auto itByteServed = m_ueDlTotalBytesServed.find(rnti);
-        if (itByteServed != m_ueDlTotalBytesServed.end())
-        {
-            rntiTotalBytesServed = itByteServed->second;
-        }
+        const double rntiUeThp = rntiActualThroughput * 1000.0; // DRB.UEThp [kbps]
 
+        // fields shared by E3 and E2SM-KPM: same names, units and definitions
         e3Indication->ue[ueIdx].rnti = rnti;
+        e3Indication->ue[ueIdx].ueId = ueId;
+        e3Indication->ue[ueIdx].qosId = rntiQci;
+        e3Indication->ue[ueIdx].drbUeThp = rntiUeThp;
         e3Indication->ue[ueIdx].cqi = rntiCqi;
-        e3Indication->ue[ueIdx].bufferLevel = rntiTotalBuffer;
-        e3Indication->ue[ueIdx].contentCriticality = rntiCriticality;
+        e3Indication->ue[ueIdx].bufferSize = rntiTotalBuffer;
         std::snprintf(e3Indication->ue[ueIdx].contentId, MAX_ID_LEN, "%s", rntiContentId.c_str());
-        e3Indication->ue[ueIdx].qci = rntiQci;
-        e3Indication->ue[ueIdx].achievableRate = rntiAchievableRate;
-        e3Indication->ue[ueIdx].actualThroughput = rntiActualThroughput;
-        e3Indication->ue[ueIdx].totalBytesServed = rntiTotalBytesServed;
         e3Indication->ue[ueIdx].packetDelay = rntiPacketDelay;
+        e3Indication->ue[ueIdx].contentCriticality = rntiCriticality;
+        e3Indication->ue[ueIdx].achievableRate = rntiAchievableRate;
 
-        e2KpmReport->ue[ueIdx].rnti = rnti;
-        e2KpmReport->ue[ueIdx].cqi = rntiCqi;
-        e2KpmReport->ue[ueIdx].bufferLevel = rntiTotalBuffer;
-        std::snprintf(e2KpmReport->ue[ueIdx].contentId, MAX_ID_LEN, "%s", rntiContentId.c_str());
-        e2KpmReport->ue[ueIdx].qci = rntiQci;
-        e2KpmReport->ue[ueIdx].achievableRate = rntiAchievableRate;
-        e2KpmReport->ue[ueIdx].actualThroughput = rntiActualThroughput;
-        e2KpmReport->ue[ueIdx].totalBytesServed = rntiTotalBytesServed;
-        e2KpmReport->ue[ueIdx].packetDelay = rntiPacketDelay;
+        e2KpmIndication->ue[ueIdx].rnti = rnti;
+        e2KpmIndication->ue[ueIdx].ueId = ueId;
+        e2KpmIndication->ue[ueIdx].qosId = rntiQci;
+        e2KpmIndication->ue[ueIdx].drbUeThp = rntiUeThp;
+        e2KpmIndication->ue[ueIdx].cqi = rntiCqi;
+        e2KpmIndication->ue[ueIdx].bufferSize = rntiTotalBuffer;
+        std::snprintf(e2KpmIndication->ue[ueIdx].contentId,
+                      MAX_ID_LEN,
+                      "%s",
+                      rntiContentId.c_str());
+        e2KpmIndication->ue[ueIdx].packetDelay = rntiPacketDelay;
 
         totalBuffer += rntiTotalBuffer;
         addedRntis.insert(rnti);
@@ -1161,67 +1205,106 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
     uint64_t timestamp = Simulator::Now().GetNanoSeconds();
     uint32_t subframeNo = (params.m_sfnSf & 0x000F) - 1;
     uint32_t frameNo = (params.m_sfnSf >> 4) & 0x03FF;
-    m_dlE3IndicationId += 1;
-    m_dlE2KpmReportId += 1;
+    m_dlE3IndicationSn += 1;
 
     e3Indication->type = E3SM_INDICATION;
+    e3Indication->dAppId = m_dAppId;
+    e3Indication->indicationSn = m_dlE3IndicationSn;
+    e3Indication->cellId = m_cellId;
     e3Indication->timestamp = timestamp;
     e3Indication->subframeNo = subframeNo;
     e3Indication->frameNo = frameNo;
     e3Indication->numUe = ueIdx;
-    e3Indication->totalBufferLevel = totalBuffer;
+    e3Indication->totalBufferSize = totalBuffer;
     e3Indication->initRbg = rbgStart;
     e3Indication->numRbg = numRbg;
     e3Indication->rbgSize = rbgSize;
     e3Indication->linkDirection = DOWNLINK;
-    e3Indication->id = m_dlE3IndicationId;
 
-    e2KpmReport->type = E2SM_KPM_REPORT;
-    e2KpmReport->timestamp = timestamp;
-    e2KpmReport->frameNo = frameNo;
-    e2KpmReport->numUe = ueIdx;
-    e2KpmReport->totalBufferLevel = totalBuffer;
-    e2KpmReport->numRbg = numRbg;
-    e2KpmReport->rbgSize = rbgSize;
-    e2KpmReport->linkDirection = DOWNLINK;
-    e2KpmReport->id = m_dlE2KpmReportId;
+    // E2SM-KPM event trigger: one indication per subscribed period, frame-aligned
+    const uint64_t frameCount = timestamp / 10'000'000ULL;
+    if (frameCount - m_lastKpmFrame[DOWNLINK] >= m_kpmReportPeriodFrames)
+    {
+        // collection period: from the previous indication to now
+        e2KpmIndication->collectionStartTime = m_lastKpmFrame[DOWNLINK] * 10'000'000ULL;
+        e2KpmIndication->granularityPeriod =
+            static_cast<uint32_t>(frameCount - m_lastKpmFrame[DOWNLINK]) * 10; // actual window [ms]
+        m_lastKpmFrame[DOWNLINK] = frameCount;
+        m_dlE2KpmIndicationSn += 1;
+        e2KpmIndication->ricRequestorId = m_ricRequestorId;
+        e2KpmIndication->ricInstanceId = m_ricInstanceId;
+        e2KpmIndication->indicationSn = m_dlE2KpmIndicationSn;
+        e2KpmIndication->cellId = m_cellId;
+        e2KpmIndication->present = 1;
+        e2KpmIndication->numUe = ueIdx;
+        e2KpmIndication->numRbg = numRbg;
+        e2KpmIndication->rbgSize = rbgSize;
+        FillKpmVolume(e2KpmIndication, DOWNLINK);
+    }
+    else
+    {
+        InitE2KpmIndication(e2KpmIndication); // period not elapsed: drop the UE entries
+    }
+    e2KpmIndication->linkDirection = DOWNLINK;
 
     m_shmInterface->CppSendEnd();
 
     // -- SHARED-MEMORY INTERFACE (PY2CPP) ---------------------------
     m_shmInterface->CppRecvBegin();
     Py2Cpp* py2Cpp = m_shmInterface->GetPy2CppStruct();
-    E3Control* e3Control = &(py2Cpp->e3Control);
-    E2RcControl* e2RcControl = &(py2Cpp->e2RcControl);
+    E3ControlRequest* e3ControlRequest = &(py2Cpp->e3ControlRequest);
+    E2RcControlRequest* e2RcControlRequest = &(py2Cpp->e2RcControlRequest);
+
+    ControlOutcome& outcome = m_outcome[DOWNLINK];
+    outcome = ControlOutcome{};
+    outcome.e3RequestSn = e3ControlRequest->requestSn;
+    outcome.e2RcRequestSn = e2RcControlRequest->requestSn;
 
     bool validCtrl = true;
-    if (e3Control->type != E3SM_CONTROL)
+    if (e3ControlRequest->type != E3SM_CONTROL_REQUEST)
     {
-        std::cerr << "ib-ORAN LTE MAC Scheduler: dApp responded with an invalid message type.\n";
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (DL): dApp invalid message type: Skipped.");
+        outcome.e3Cause = CAUSE_INVALID_TYPE;
         validCtrl = false;
     }
-    else if (e2RcControl->type != E2SM_RC_CONTROL)
+    else if (e2RcControlRequest->type != E2SM_RC_CONTROL_REQUEST)
     {
-        std::cerr << "ib-ORAN LTE MAC Scheduler: xApp responded with an invalid message type.\n";
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (DL): xApp invalid message type: Skipped.");
+        outcome.e2RcCause = CAUSE_INVALID_TYPE;
         validCtrl = false;
     }
-    else if (e3Control->linkDirection != DOWNLINK || e2RcControl->linkDirection != DOWNLINK)
+    else if (e2RcControlRequest->ranFunctionId != RAN_FUNCTION_ID_RC)
     {
-        std::cerr
-            << "ib-ORAN LTE MAC Scheduler: controller responded to a different link direction.\n";
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (DL): xApp invalid RAN function: Skipped.");
+        outcome.e2RcCause = CAUSE_INVALID_RAN_FUNCTION;
+        validCtrl = false;
+    }
+    else if (e3ControlRequest->linkDirection != DOWNLINK)
+    {
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (DL): dApp wrong direction: Skipped.");
+        outcome.e3Cause = CAUSE_WRONG_DIRECTION;
+        validCtrl = false;
+    }
+    else if (e2RcControlRequest->linkDirection != DOWNLINK)
+    {
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (DL): xApp wrong direction: Skipped.");
+        outcome.e2RcCause = CAUSE_WRONG_DIRECTION;
         validCtrl = false;
     }
 
     if (validCtrl)
     {
-        uint32_t maxUeSchedSize = e2RcControl->maxUeSchedSize;
-        uint32_t ueSchedSize = std::min(e3Control->ueSchedSize, maxUeSchedSize);
-        if (!e3Control->skipThisStep && !e2RcControl->skipThisStep && ueSchedSize > 0)
+        uint32_t maxUeSchedSize = e2RcControlRequest->maxUeSchedSize;
+        uint32_t ueSchedSize = std::min(e3ControlRequest->ueSchedSize, maxUeSchedSize);
+        if (!e3ControlRequest->skipThisStep && !e2RcControlRequest->skipThisStep && ueSchedSize > 0)
         {
-            for (uint32_t i = 0; i < e2RcControl->maxUeSchedSize; i++)
+            for (uint32_t i = 0; i < e2RcControlRequest->maxUeSchedSize; i++)
             {
-                uint16_t rntiFromXApp = e2RcControl->ue[i].rnti;
-                m_ueDlMaxRbgAllocation[rntiFromXApp] = e2RcControl->ue[i].maxRbgAllocation;
+                const uint64_t boundUeId = e2RcControlRequest->ue[i].ueId;
+                if (boundUeId != 0) // 0: inert entry, or UE not identified yet
+                {
+                    m_ueDlMaxRbgAllocation[boundUeId] = e2RcControlRequest->ue[i].maxRbgAllocation;
+                }
             }
 
             std::map<uint16_t, unsigned int> lcActivesPerRnti;
@@ -1239,13 +1322,14 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
             uint32_t totalRbAllocated = 0;
             for (uint32_t i = 0; i < ueSchedSize; i++)
             {
-                uint16_t rnti = e3Control->ue[i].rnti;
-                uint16_t rbgStart = e3Control->ue[i].initAllocatedRbg;
-                uint16_t rbgLen = e3Control->ue[i].numAllocatedRbg;
-                uint8_t mcs = e3Control->ue[i].mcs;
+                uint16_t rnti = e3ControlRequest->ue[i].rnti;
+                uint16_t rbgStart = e3ControlRequest->ue[i].initAllocatedRbg;
+                uint16_t rbgLen = e3ControlRequest->ue[i].numAllocatedRbg;
+                uint8_t mcs = e3ControlRequest->ue[i].mcs;
 
                 uint16_t maxRbgAllocation = 0;
-                auto it = m_ueDlMaxRbgAllocation.find(rnti);
+                const uint64_t ueId = SideInfoTracker::GetInstance().GetUeId(m_cellId, rnti);
+                auto it = m_ueDlMaxRbgAllocation.find(ueId);
                 if (it != m_ueDlMaxRbgAllocation.end())
                 {
                     maxRbgAllocation = it->second;
@@ -1259,15 +1343,19 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
                 std::map<uint16_t, uint8_t>::iterator itTxMode = m_uesTxMode.find(rnti);
                 if (itTxMode == m_uesTxMode.end())
                 {
-                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent invalid RNTI " << rnti
-                              << ": Skipping.\n";
+                    NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (DL): dApp sent invalid RNTI "
+                                << rnti << ": Skipped.");
+                    outcome.e3Cause = CAUSE_INVALID_RNTI;
+                    ++outcome.e3NumRejectedUe;
                     continue;
                 }
 
                 if (mcs > 28)
                 {
-                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent invalid MCS " << (int)mcs
-                              << " for RNTI " << rnti << ": Skipping.\n";
+                    NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (DL): dApp sent invalid MCS "
+                                << (int)mcs << " for RNTI " << rnti << ": Skipped.");
+                    outcome.e3Cause = CAUSE_INVALID_MCS;
+                    ++outcome.e3NumRejectedUe;
                     continue;
                 }
 
@@ -1278,15 +1366,19 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
 
                 if (rbgStart + rbgLen > rbgNum || rbgLen > maxRbgAllocation)
                 {
-                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent out-of-bound RB allocation "
-                                 "for RNTI "
-                              << rnti << ": Skipping.\n";
+                    NS_LOG_WARN(
+                        "ib-ORAN LTE MAC Scheduler (DL): dApp sent out-of-bound RB allocation "
+                        "for RNTI "
+                        << rnti << ": Skipped.");
+                    outcome.e3Cause = CAUSE_RBG_OUT_OF_RANGE;
+                    ++outcome.e3NumRejectedUe;
                     continue;
                 }
 
                 if (totalRbAllocated + rbgLen > (uint32_t)(rbgNum - rbgAllocatedNum))
                 {
-                    NS_LOG_WARN("Controller over-allocated RBs: Stopping allocations");
+                    NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (DL): Controller over-allocated RBs: "
+                                "Stopped allocation.");
                     break;
                 }
 
@@ -1307,7 +1399,7 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
 
                 if (!HarqProcessAvailability(rnti))
                 {
-                    NS_LOG_WARN("No free HARQ process for RNTI " << rnti << ": skipping");
+                    NS_LOG_WARN("No free HARQ process for RNTI " << rnti << ": Skipped.");
                     continue;
                 }
 
@@ -1325,7 +1417,7 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
 
                 if (conflictFound)
                 {
-                    NS_LOG_ERROR("RB conflict for RNTI " << rnti << ": skipping UE");
+                    NS_LOG_ERROR("RB conflict for RNTI " << rnti << ": UE skipped.");
                     continue;
                 }
 
@@ -1356,8 +1448,6 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
                 }
                 uint16_t rlcPduSize = tbSize / lcNum;
 
-                m_ueDlTotalBytesServed[rnti] += tbSize;
-
                 for (int layer = 0; layer < nLayers; layer++)
                 {
                     dlDci.m_mcs.push_back(mcs);
@@ -1375,10 +1465,11 @@ IbOranLteMacScheduler::DoSchedDlTriggerReq(
                                          req.m_rlcRetransmissionQueueSize + req.m_rlcStatusPduSize;
                     }
                 }
-                m_dlTput.AddServed(
-                    rnti,
-                    nowNs,
-                    std::min<uint32_t>(static_cast<uint32_t>(tbSize) * nLayers, rntiBufBefore));
+                // bytes served: every layer, without padding (same for DRB.UEThp and volume)
+                const uint32_t servedBytes =
+                    std::min<uint32_t>(static_cast<uint32_t>(tbSize) * nLayers, rntiBufBefore);
+                m_dlTput.AddServed(rnti, nowNs, servedBytes);
+                m_ueDlTotalBytesServed[rnti] += servedBytes;
 
                 std::map<LteFlowId_t,
                          FfMacSchedSapProvider::SchedDlRlcBufferReqParameters>::iterator itRlc;
@@ -1623,7 +1714,8 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
                 auto itProcId = m_ulHarqCurrentProcessId.find(rnti);
                 if (itProcId == m_ulHarqCurrentProcessId.end())
                 {
-                    NS_LOG_ERROR("No info find in HARQ buffer for UE (might change eNB) " << rnti);
+                    NS_LOG_ERROR("No info find in HARQ buffer for UE (might change eNodeB) "
+                                 << rnti);
                 }
                 uint8_t harqId = (uint8_t)((*itProcId).second - HARQ_PERIOD) % HARQ_PROC_NUM;
                 NS_LOG_INFO(this << " UL-HARQ retx RNTI " << rnti << " harqId " << (uint16_t)harqId
@@ -1631,14 +1723,16 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
                 auto itHarq = m_ulHarqProcessesDciBuffer.find(rnti);
                 if (itHarq == m_ulHarqProcessesDciBuffer.end())
                 {
-                    NS_LOG_ERROR("No info find in HARQ buffer for UE (might change eNB) " << rnti);
+                    NS_LOG_ERROR("No info find in HARQ buffer for UE (might change eNodeB) "
+                                 << rnti);
                     continue;
                 }
                 UlDciListElement_s dci = (*itHarq).second.at(harqId);
                 auto itStat = m_ulHarqProcessesStatus.find(rnti);
                 if (itStat == m_ulHarqProcessesStatus.end())
                 {
-                    NS_LOG_ERROR("No info find in HARQ buffer for UE (might change eNB) " << rnti);
+                    NS_LOG_ERROR("No info find in HARQ buffer for UE (might change eNodeB) "
+                                 << rnti);
                 }
                 if ((*itStat).second.at(harqId) >= 3)
                 {
@@ -1709,13 +1803,20 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
     }
 
     // -- SHARED-MEMORY INTERFACE (CPP2PY) ---------------------------
+    if (!m_setupDone)
+    {
+        DoSetupExchange();
+    }
     m_shmInterface->CppSendBegin();
     Cpp2Py* cpp2Py = m_shmInterface->GetCpp2PyStruct();
     E3Indication* e3Indication = &(cpp2Py->e3Indication);
-    E2KpmReport* e2KpmReport = &(cpp2Py->e2KpmReport);
+    E2KpmIndication* e2KpmIndication = &(cpp2Py->e2KpmIndication);
 
     InitE3Indication(e3Indication);
-    InitE2KpmReport(e2KpmReport);
+    InitE2KpmIndication(e2KpmIndication);
+
+    cpp2Py->phase = PHASE_RUN;
+    cpp2Py->controlOutcome = m_outcome[UPLINK];
 
     int rbgStart = 0;
     for (size_t i = 0; i < rbMap.size(); i++)
@@ -1768,42 +1869,42 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
             }
         }
 
+        // full-band rate at current CQI (TBS bits per 1 ms TTI = kbps)
         const uint8_t rntiMcsFull = m_amc->GetMcsFromCqi(rntiCqi);
-        const double rntiAchievableRate =
-            m_amc->GetUlTbSizeFromMcs(rntiMcsFull, m_cschedCellConfig.m_ulBandwidth) / 1e3;
+        const double rntiAchievableRate = static_cast<double>(
+            m_amc->GetUlTbSizeFromMcs(rntiMcsFull, m_cschedCellConfig.m_ulBandwidth));
         const double rntiActualThroughput = m_ulTput.GetMbps(rnti, nowNs);
 
         uint8_t rntiQci = GetQciForRnti(rnti);
+        const uint64_t ueId = SideInfoTracker::GetInstance().GetUeId(m_cellId, rnti);
 
         const uint32_t rntiPacketDelay = m_ulWaiting.GetWaitingMs(rnti, nowNs);
 
-        uint32_t rntiTotalBytesServed = 0;
-        auto itUlByteServed = m_ueUlTotalBytesServed.find(rnti);
-        if (itUlByteServed != m_ueUlTotalBytesServed.end())
-        {
-            rntiTotalBytesServed = itUlByteServed->second;
-        }
+        const double rntiUeThp = rntiActualThroughput * 1000.0; // DRB.UEThp [kbps]
 
+        // fields shared by E3 and E2SM-KPM: same names, units and definitions
         e3Indication->ue[ueIdx].rnti = rnti;
+        e3Indication->ue[ueIdx].ueId = ueId;
+        e3Indication->ue[ueIdx].qosId = rntiQci;
+        e3Indication->ue[ueIdx].drbUeThp = rntiUeThp;
         e3Indication->ue[ueIdx].cqi = rntiCqi;
-        e3Indication->ue[ueIdx].bufferLevel = rntiTotalBuffer;
-        e3Indication->ue[ueIdx].contentCriticality = rntiCriticality;
+        e3Indication->ue[ueIdx].bufferSize = rntiTotalBuffer;
         std::snprintf(e3Indication->ue[ueIdx].contentId, MAX_ID_LEN, "%s", rntiContentId.c_str());
-        e3Indication->ue[ueIdx].qci = rntiQci;
-        e3Indication->ue[ueIdx].achievableRate = rntiAchievableRate;
-        e3Indication->ue[ueIdx].actualThroughput = rntiActualThroughput;
-        e3Indication->ue[ueIdx].totalBytesServed = rntiTotalBytesServed;
         e3Indication->ue[ueIdx].packetDelay = rntiPacketDelay;
+        e3Indication->ue[ueIdx].contentCriticality = rntiCriticality;
+        e3Indication->ue[ueIdx].achievableRate = rntiAchievableRate;
 
-        e2KpmReport->ue[ueIdx].rnti = rnti;
-        e2KpmReport->ue[ueIdx].cqi = rntiCqi;
-        e2KpmReport->ue[ueIdx].bufferLevel = rntiTotalBuffer;
-        std::snprintf(e2KpmReport->ue[ueIdx].contentId, MAX_ID_LEN, "%s", rntiContentId.c_str());
-        e2KpmReport->ue[ueIdx].qci = rntiQci;
-        e2KpmReport->ue[ueIdx].achievableRate = rntiAchievableRate;
-        e2KpmReport->ue[ueIdx].actualThroughput = rntiActualThroughput;
-        e2KpmReport->ue[ueIdx].totalBytesServed = rntiTotalBytesServed;
-        e2KpmReport->ue[ueIdx].packetDelay = rntiPacketDelay;
+        e2KpmIndication->ue[ueIdx].rnti = rnti;
+        e2KpmIndication->ue[ueIdx].ueId = ueId;
+        e2KpmIndication->ue[ueIdx].qosId = rntiQci;
+        e2KpmIndication->ue[ueIdx].drbUeThp = rntiUeThp;
+        e2KpmIndication->ue[ueIdx].cqi = rntiCqi;
+        e2KpmIndication->ue[ueIdx].bufferSize = rntiTotalBuffer;
+        std::snprintf(e2KpmIndication->ue[ueIdx].contentId,
+                      MAX_ID_LEN,
+                      "%s",
+                      rntiContentId.c_str());
+        e2KpmIndication->ue[ueIdx].packetDelay = rntiPacketDelay;
 
         totalBuffer += rntiTotalBuffer;
         ++ueIdx;
@@ -1823,79 +1924,119 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
     uint64_t timestamp = Simulator::Now().GetNanoSeconds();
     uint32_t subframeNo = (params.m_sfnSf & 0x000F) - 1;
     uint32_t frameNo = (params.m_sfnSf >> 4) & 0x03FF;
-    m_ulE3IndicationId += 1;
-    m_ulE2KpmReportId += 1;
+    m_ulE3IndicationSn += 1;
 
     e3Indication->type = E3SM_INDICATION;
+    e3Indication->dAppId = m_dAppId;
+    e3Indication->indicationSn = m_ulE3IndicationSn;
+    e3Indication->cellId = m_cellId;
     e3Indication->timestamp = timestamp;
     e3Indication->subframeNo = subframeNo;
     e3Indication->frameNo = frameNo;
     e3Indication->numUe = ueIdx;
-    e3Indication->totalBufferLevel = totalBuffer;
+    e3Indication->totalBufferSize = totalBuffer;
     e3Indication->initRbg = rbgStart;
     e3Indication->numRbg = numRb;
     e3Indication->rbgSize = 1;
     e3Indication->linkDirection = UPLINK;
-    e3Indication->id = m_ulE3IndicationId;
 
-    e2KpmReport->type = E2SM_KPM_REPORT;
-    e2KpmReport->timestamp = timestamp;
-    e2KpmReport->frameNo = frameNo;
-    e2KpmReport->numUe = ueIdx;
-    e2KpmReport->totalBufferLevel = totalBuffer;
-    e2KpmReport->numRbg = numRb;
-    e2KpmReport->rbgSize = 1;
-    e2KpmReport->linkDirection = UPLINK;
-    e2KpmReport->id = m_ulE2KpmReportId;
+    // E2SM-KPM event trigger: one indication per subscribed period, frame-aligned
+    const uint64_t frameCount = timestamp / 10'000'000ULL;
+    if (frameCount - m_lastKpmFrame[UPLINK] >= m_kpmReportPeriodFrames)
+    {
+        // collection period: from the previous indication to now
+        e2KpmIndication->collectionStartTime = m_lastKpmFrame[UPLINK] * 10'000'000ULL;
+        e2KpmIndication->granularityPeriod =
+            static_cast<uint32_t>(frameCount - m_lastKpmFrame[UPLINK]) * 10; // actual window [ms]
+        m_lastKpmFrame[UPLINK] = frameCount;
+        m_ulE2KpmIndicationSn += 1;
+        e2KpmIndication->ricRequestorId = m_ricRequestorId;
+        e2KpmIndication->ricInstanceId = m_ricInstanceId;
+        e2KpmIndication->indicationSn = m_ulE2KpmIndicationSn;
+        e2KpmIndication->cellId = m_cellId;
+        e2KpmIndication->present = 1;
+        e2KpmIndication->numUe = ueIdx;
+        e2KpmIndication->numRbg = numRb;
+        e2KpmIndication->rbgSize = 1;
+        FillKpmVolume(e2KpmIndication, UPLINK);
+    }
+    else
+    {
+        InitE2KpmIndication(e2KpmIndication); // period not elapsed: drop the UE entries
+    }
+    e2KpmIndication->linkDirection = UPLINK;
 
     m_shmInterface->CppSendEnd();
 
     // -- SHARED-MEMORY INTERFACE (PY2CPP) ---------------------------
     m_shmInterface->CppRecvBegin();
     Py2Cpp* py2Cpp = m_shmInterface->GetPy2CppStruct();
-    E3Control* e3Control = &(py2Cpp->e3Control);
-    E2RcControl* e2RcControl = &(py2Cpp->e2RcControl);
+    E3ControlRequest* e3ControlRequest = &(py2Cpp->e3ControlRequest);
+    E2RcControlRequest* e2RcControlRequest = &(py2Cpp->e2RcControlRequest);
+
+    ControlOutcome& outcome = m_outcome[UPLINK];
+    outcome = ControlOutcome{};
+    outcome.e3RequestSn = e3ControlRequest->requestSn;
+    outcome.e2RcRequestSn = e2RcControlRequest->requestSn;
 
     bool validCtrl = true;
-    if (e3Control->type != E3SM_CONTROL)
+    if (e3ControlRequest->type != E3SM_CONTROL_REQUEST)
     {
-        std::cerr << "ib-ORAN LTE MAC Scheduler: dApp responded with an invalid message type.\n";
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (UL): dApp invalid message type: Skipped.");
+        outcome.e3Cause = CAUSE_INVALID_TYPE;
         validCtrl = false;
     }
-    else if (e2RcControl->type != E2SM_RC_CONTROL)
+    else if (e2RcControlRequest->type != E2SM_RC_CONTROL_REQUEST)
     {
-        std::cerr << "ib-ORAN LTE MAC Scheduler: xApp responded with an invalid message type.\n";
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (UL): xApp invalid message type: Skipped.");
+        outcome.e2RcCause = CAUSE_INVALID_TYPE;
         validCtrl = false;
     }
-    else if (e3Control->linkDirection != UPLINK || e2RcControl->linkDirection != UPLINK)
+    else if (e2RcControlRequest->ranFunctionId != RAN_FUNCTION_ID_RC)
     {
-        std::cerr
-            << "ib-ORAN LTE MAC Scheduler: controller responded to a different link direction.\n";
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (UL): xApp invalid RAN function: Skipped.");
+        outcome.e2RcCause = CAUSE_INVALID_RAN_FUNCTION;
+        validCtrl = false;
+    }
+    else if (e3ControlRequest->linkDirection != UPLINK)
+    {
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (UL): dApp wrong direction: Skipped.");
+        outcome.e3Cause = CAUSE_WRONG_DIRECTION;
+        validCtrl = false;
+    }
+    else if (e2RcControlRequest->linkDirection != UPLINK)
+    {
+        NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (UL): xApp wrong direction: Skipped.");
+        outcome.e2RcCause = CAUSE_WRONG_DIRECTION;
         validCtrl = false;
     }
 
     if (validCtrl)
     {
-        uint32_t maxUeSchedSize = e2RcControl->maxUeSchedSize;
-        uint32_t ueSchedSize = std::min(e3Control->ueSchedSize, maxUeSchedSize);
-        if (!e3Control->skipThisStep && !e2RcControl->skipThisStep && ueSchedSize > 0)
+        uint32_t maxUeSchedSize = e2RcControlRequest->maxUeSchedSize;
+        uint32_t ueSchedSize = std::min(e3ControlRequest->ueSchedSize, maxUeSchedSize);
+        if (!e3ControlRequest->skipThisStep && !e2RcControlRequest->skipThisStep && ueSchedSize > 0)
         {
-            for (uint32_t i = 0; i < e2RcControl->maxUeSchedSize; i++)
+            for (uint32_t i = 0; i < e2RcControlRequest->maxUeSchedSize; i++)
             {
-                uint16_t rntiFromXApp = e2RcControl->ue[i].rnti;
-                m_ueUlMaxRbgAllocation[rntiFromXApp] = e2RcControl->ue[i].maxRbgAllocation;
+                const uint64_t boundUeId = e2RcControlRequest->ue[i].ueId;
+                if (boundUeId != 0) // 0: inert entry, or UE not identified yet
+                {
+                    m_ueUlMaxRbgAllocation[boundUeId] = e2RcControlRequest->ue[i].maxRbgAllocation;
+                }
             }
 
             uint32_t totalRbAllocated = 0;
             for (uint32_t i = 0; i < ueSchedSize; i++)
             {
-                uint16_t rnti = e3Control->ue[i].rnti;
-                uint16_t rbgStart = e3Control->ue[i].initAllocatedRbg;
-                uint16_t rbgLen = e3Control->ue[i].numAllocatedRbg;
-                uint8_t mcs = e3Control->ue[i].mcs;
+                uint16_t rnti = e3ControlRequest->ue[i].rnti;
+                uint16_t rbgStart = e3ControlRequest->ue[i].initAllocatedRbg;
+                uint16_t rbgLen = e3ControlRequest->ue[i].numAllocatedRbg;
+                uint8_t mcs = e3ControlRequest->ue[i].mcs;
 
                 uint16_t maxRbgAllocation = 0;
-                auto it = m_ueUlMaxRbgAllocation.find(rnti);
+                const uint64_t ueId = SideInfoTracker::GetInstance().GetUeId(m_cellId, rnti);
+                auto it = m_ueUlMaxRbgAllocation.find(ueId);
                 if (it != m_ueUlMaxRbgAllocation.end())
                 {
                     maxRbgAllocation = it->second;
@@ -1913,24 +2054,29 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
 
                 if (mcs > 28)
                 {
-                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent invalid MCS " << (int)mcs
-                              << " for RNTI " << rnti << ": Skipping.\n";
+                    NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (UL): dApp sent invalid MCS "
+                                << (int)mcs << " for RNTI " << rnti << ": Skipped.");
+                    outcome.e3Cause = CAUSE_INVALID_MCS;
+                    ++outcome.e3NumRejectedUe;
                     continue;
                 }
 
                 if (rbgStart + rbgLen > m_cschedCellConfig.m_ulBandwidth ||
                     rbgLen > maxRbgAllocation)
                 {
-                    std::cerr << "ib-ORAN LTE MAC Scheduler: dApp sent out-of-bound RB allocation "
-                                 "for RNTI "
-                              << rnti << ": Skipping.\n";
+                    NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (UL): dApp sent out-of-bound RB "
+                                "allocation for RNTI "
+                                << rnti << ": Skipped.");
+                    outcome.e3Cause = CAUSE_RBG_OUT_OF_RANGE;
+                    ++outcome.e3NumRejectedUe;
                     continue;
                 }
 
                 if (totalRbAllocated + rbgLen >
                     (uint32_t)(m_cschedCellConfig.m_ulBandwidth - rbAllocatedNum))
                 {
-                    NS_LOG_WARN("Controller over-allocated UL RBs: Stopping allocations");
+                    NS_LOG_WARN("ib-ORAN LTE MAC Scheduler (UL): Controller over-allocated UL RBs: "
+                                "Stopped allocation.");
                     break;
                 }
 
@@ -1947,7 +2093,7 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
                 if (!free)
                 {
                     NS_LOG_WARN(this << " RB allocation conflict for RNTI " << rnti
-                                     << ": Skipping.\n");
+                                     << ": Skipped.\n");
                     continue;
                 }
 
@@ -1966,9 +2112,10 @@ IbOranLteMacScheduler::DoSchedUlTriggerReq(
                 ulDci.m_mcs = mcs;
                 uint32_t tbSize = m_amc->GetUlTbSizeFromMcs(mcs, rbgLen) / 8;
                 ulDci.m_tbSize = tbSize;
-                m_ueUlTotalBytesServed[rnti] += tbSize;
                 const uint32_t bsrBefore = m_ceBsrRxed[rnti];
-                m_ulTput.AddServed(rnti, nowNs, std::min(tbSize, bsrBefore));
+                const uint32_t servedBytes = std::min(tbSize, bsrBefore);
+                m_ueUlTotalBytesServed[rnti] += servedBytes;
+                m_ulTput.AddServed(rnti, nowNs, servedBytes);
                 UpdateUlRlcBufferInfo(ulDci.m_rnti, ulDci.m_tbSize);
                 ulDci.m_ndi = 1;
                 ulDci.m_cceIndex = 0;

@@ -11,7 +11,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from model.iboran_interfaces.iboran_shm_structure import E3Indication
-from model.iboran_interfaces.iboran_e2sm_dapp_structure import E2DAppControl
+from model.iboran_interfaces.iboran_e2sm_dapp_structure import E2DAppControlRequest
 from model.iboran_interfaces.iboran_shm_protocol import LinkDirection, RatType
 from model.utils.rbg_demand_calculator import RbgDemandCalculator
 from model.utils.mcs_assigner import McsAssigner
@@ -57,7 +57,10 @@ class DAppAlgoUeSelection(ABC):
         self._metric_fn = None
 
     def execute(
-        self, e3Indication: E3Indication, e2DAppControl: E2DAppControl, **kwargs
+        self,
+        e3Indication: E3Indication,
+        e2DAppControlRequest: E2DAppControlRequest,
+        **kwargs,
     ) -> tuple[list, list]:
         candidates = self._derive_candidates(e3Indication)
         skipped = kwargs.get("skipped_rntis", set())
@@ -72,7 +75,7 @@ class DAppAlgoUeSelection(ABC):
             self.selected_rnti_k = []
             return [], []
 
-        done = self.process(candidates, e3Indication, e2DAppControl, **kwargs)
+        done = self.process(candidates, e3Indication, e2DAppControlRequest, **kwargs)
         if not (done or self._selection_is_verified(e3Indication)):
             raise ValueError(f"{self.id} UE selection failed.")
 
@@ -82,14 +85,14 @@ class DAppAlgoUeSelection(ABC):
         return self.selected_idx_k, self.selected_rnti_k
 
     @abstractmethod
-    def process(self, candidates, e3Indication, e2DAppControl, **kwargs) -> bool:
+    def process(self, candidates, e3Indication, e2DAppControlRequest, **kwargs) -> bool:
         "Execute the UE selection."
         ...
 
     def _derive_candidates(self, e3Indication) -> list[int]:
         "Derive candidate UEs to be scheduled."
         ues = e3Indication.ue
-        candidates = [i for i in range(e3Indication.numUe) if ues[i].bufferLevel > 0]
+        candidates = [i for i in range(e3Indication.numUe) if ues[i].bufferSize > 0]
 
         if self.intents is not None:  # intent-based pre-selection
             intents = self.intents[e3Indication.linkDirection]
@@ -150,7 +153,7 @@ class DAppAlgoUeSelection(ABC):
         dispatch = {
             "Cqi": self._metric_cqi,
             "Criticality": self._metric_criticality,
-            "BufferLevel": self._metric_buffer_size,
+            "BufferSize": self._metric_buffer_size,
             "PropFairness": self._metric_prop_fairness,
             "MultiCriteria": self._metric_multi_criteria,
         }
@@ -166,12 +169,13 @@ class DAppAlgoUeSelection(ABC):
         return [e3Indication.ue[i].contentCriticality for i in candidates]
 
     def _metric_buffer_size(self, e3Indication, candidates, **kwargs) -> list[float]:
-        return [e3Indication.ue[i].bufferLevel for i in candidates]
+        return [e3Indication.ue[i].bufferSize for i in candidates]
 
     def _metric_prop_fairness(self, e3Indication, candidates, **kwargs) -> list[float]:
         _hist_link_rnti_tps = kwargs.get("_hist_link_rnti_tps", {})
         return [
             e3Indication.ue[i].achievableRate
+            / 1000.0  # convert from kbps to Mbps
             / _hist_link_rnti_tps.get(e3Indication.linkDirection, {}).get(
                 e3Indication.ue[i].rnti,
                 1e-9,  # to avoid division by zero for new UEs
@@ -183,6 +187,7 @@ class DAppAlgoUeSelection(ABC):
         _hist_link_rnti_tps = kwargs.get("_hist_link_rnti_tps", {})
         fairness = [
             e3Indication.ue[i].achievableRate
+            / 1000.0  # convert from kbps to Mbps
             / _hist_link_rnti_tps.get(e3Indication.linkDirection, {}).get(
                 e3Indication.ue[i].rnti,
                 1e-9,  # to avoid division by zero for new UEs
@@ -191,7 +196,7 @@ class DAppAlgoUeSelection(ABC):
         ]
 
         criticality = [e3Indication.ue[i].contentCriticality for i in candidates]
-        buffer_size = [e3Indication.ue[i].bufferLevel for i in candidates]
+        buffer_size = [e3Indication.ue[i].bufferSize for i in candidates]
         cqi = [e3Indication.ue[i].cqi for i in candidates]
 
         self.weights[e3Indication.linkDirection] = self._get_weights(

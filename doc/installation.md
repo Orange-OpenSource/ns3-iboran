@@ -66,7 +66,8 @@ pip install -e contrib/ai/python_utils
 pip install -e contrib/ai/model/gym-interface/py
 ```
 
-The setup script in step 4 expects the virtual environment at `.venv` in the ns-3 root.
+> [!IMPORTANT]
+> The setup script in step 4 expects the virtual environment at `.venv` in the ns-3 root.
 
 ### Step 3: Configure and build ns-3
 
@@ -93,11 +94,23 @@ cd contrib/iboran
 bash quick-setup.sh
 ```
 
-To use ib-ORAN from a Python interpreter outside the virtual environment, such as a separate Jupyter kernel, add the module to `PYTHONPATH` in `~/.bashrc` or `~/.zshrc`:
+> [!TIP]
+> To use ib-ORAN from a Python interpreter outside the virtual environment, such as a separate Jupyter kernel, add the module to `PYTHONPATH` in `~/.bashrc` or `~/.zshrc`:
+>
+> ```shell
+> export PYTHONPATH="/path/to/ns-3/contrib/iboran:$PYTHONPATH"
+> ```
+
+### Step 5: Verify the installation
+
+Run one simulation with the default configuration:
 
 ```shell
-export PYTHONPATH="/path/to/ns-3/contrib/iboran:$PYTHONPATH"
+cd model/iboran_campaign
+python3 iboran_run.py --verbose=true
 ```
+
+The run prints its statistics and KPI summary and writes `contrib/iboran/notebook/logs/kpi.json`.
 
 ## Troubleshooting
 
@@ -111,12 +124,4 @@ With ns-3.48, the ns3-ai `rl-tcp` examples fail with "declaration of 'GetInstanc
 
 ### Python cannot import ns3-ai or ib-ORAN
 
-Activate the virtual environment used during installation, install the ns3-ai interfaces in it, then rebuild:
-
-```shell
-source .venv/bin/activate
-pip install -e contrib/ai/python_utils
-pip install -e contrib/ai/model/gym-interface/py
-./ns3 configure --enable-examples --enable-tests
-./ns3 build
-```
+Activate the virtual environment used during installation, then repeat [step 2](#step-2-set-up-the-python-environment) and [step 3](#step-3-configure-and-build-ns-3).

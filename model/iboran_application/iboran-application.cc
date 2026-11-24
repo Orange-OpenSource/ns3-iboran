@@ -810,7 +810,7 @@ IbOranTransmissionApplication::SendNextPacket()
 
     if (!m_connected)
     {
-        NS_LOG_WARN("Not connected, skipping packet");
+        NS_LOG_WARN("Not connected: Packet skipped.");
         return;
     }
     if (!PrepareNextMessage())
@@ -910,7 +910,7 @@ IbOranTransmissionApplication::PublishRntiCriticality(uint8_t criticality)
     const uint16_t rnti = GetRnti();
     if (rnti == 0)
     {
-        NS_LOG_WARN("RNTI not yet assigned, skipping criticality publish");
+        NS_LOG_WARN("RNTI not yet assigned: Publishing criticality skipped.");
         return;
     }
     SideInfoTracker::GetInstance().UpdateRntiCriticality(rnti, m_linkDirection, criticality);
